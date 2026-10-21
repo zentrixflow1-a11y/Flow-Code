@@ -8,7 +8,7 @@
  */
 import type { PermissionMode, ToolCategory } from "./types.js";
 import { isSensitivePath } from "../util/paths.js";
-import { commandWords } from "../util/text.js";
+import { commandSegments, commandWords } from "../util/text.js";
 
 /** How a mode treats a tool category when no rule applies. */
 export type CategoryOutcome = "allow" | "ask" | "deny";
@@ -161,23 +161,17 @@ export const UNSAFE_GIT_ARGUMENTS: readonly string[] = [
 ];
 
 /**
- * The `find` options that write a file or run a command.
+ * The options that make a program do something more than read.
  *
- * `fd` spells the same idea with two dashes, so both are listed.
+ * `find` and `fd` can write a file or run a command, `rg` can run a
+ * preprocessor, and `tree` can write its listing to a file.
  */
-export const UNSAFE_FIND_ARGUMENTS: readonly string[] = [
-  "-fprint",
-  "-fprintf",
-  "-fls",
-  "-ok",
-  "-okdir",
-  "-exec",
-  "-execdir",
-  "-delete",
-  "--exec",
-  "--exec-batch",
-  "--delete",
-];
+export const UNSAFE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  find: ["-fprint", "-fprintf", "-fls", "-ok", "-exec", "-delete", "-x", "-X"],
+  fd: ["-x", "-X", "--exec", "--exec-batch", "--delete"],
+  rg: ["--pre"],
+  tree: ["-o"],
+};
 
 /**
  * The environment variables that may be set before a read-only command.
@@ -238,48 +232,12 @@ export const isReadOnlyCommand = (
     return false;
   }
 
-  const segments = splitCommand(command);
+  const segments = commandSegments(command);
   if (segments.length === 0) {
     return false;
   }
 
   return segments.every((segment) => isReadOnlySegment(segment, platform));
-};
-
-/** Split a command line into its top-level segments. */
-const splitCommand = (command: string): string[] => {
-  const parts: string[] = [];
-  let current = "";
-  let quote: string | undefined;
-
-  for (const character of command) {
-    if (quote !== undefined) {
-      current += character;
-      if (character === quote) {
-        quote = undefined;
-      }
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      current += character;
-      continue;
-    }
-    if (character === "|" || character === ";" || character === "&") {
-      if (current.trim() !== "") {
-        parts.push(current.trim());
-      }
-      current = "";
-      continue;
-    }
-    current += character;
-  }
-
-  if (current.trim() !== "") {
-    parts.push(current.trim());
-  }
-
-  return parts;
 };
 
 /**
@@ -316,7 +274,14 @@ const isReadOnlySegment = (
   }
 
   const program = platform === "win32" ? raw.toLowerCase() : raw;
-  const name = program.replace(/^.*[/\\]/, "");
+
+  // A program is named, not pointed at. A path such as `/tmp/evil/ls` would
+  // be some other program entirely, wearing an allowed name.
+  if (program.includes("/")) {
+    return false;
+  }
+
+  const name = program;
 
   if (name === "git") {
     return isReadOnlyGit(words.slice(index + 1));
@@ -334,13 +299,27 @@ const isReadOnlySegment = (
     return false;
   }
 
-  if (name === "find" || name === "fd") {
-    if (arguments_.some((argument) => UNSAFE_FIND_ARGUMENTS.includes(argument))) {
-      return false;
-    }
+  if (arguments_.some((argument) => hasUnsafeOption(name, argument))) {
+    return false;
   }
 
   return !arguments_.some((argument) => touchesASecret(argument));
+};
+
+/**
+ * Whether an argument is an option that makes the program act.
+ *
+ * @param program - The program the argument belongs to.
+ * @param argument - The argument.
+ */
+const hasUnsafeOption = (program: string, argument: string): boolean => {
+  const prefixes = UNSAFE_OPTIONS[program] ?? [];
+
+  return prefixes.some((prefix) =>
+    prefix.startsWith("--")
+      ? argument === prefix || argument.startsWith(`${prefix}=`)
+      : argument.startsWith(prefix),
+  );
 };
 
 /** Whether a word is an environment assignment. */

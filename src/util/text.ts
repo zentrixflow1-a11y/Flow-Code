@@ -100,6 +100,49 @@ export const oneLine = (text: string, maxLength = 120): string => {
 };
 
 /**
+ * Split a command line into the segments a shell would run.
+ *
+ * A pipeline, a list and a chain are three segments. The quotes are taken
+ * into account, so a `;` inside a quoted string is part of the word.
+ *
+ * @param command - The command line.
+ */
+export const commandSegments = (command: string): string[] => {
+  const parts: string[] = [];
+  let current = "";
+  let quote: string | undefined;
+
+  for (const character of command) {
+    if (quote !== undefined) {
+      current += character;
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      current += character;
+      continue;
+    }
+    if (character === "|" || character === ";" || character === "&") {
+      if (current.trim() !== "") {
+        parts.push(current.trim());
+      }
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+
+  if (current.trim() !== "") {
+    parts.push(current.trim());
+  }
+
+  return parts;
+};
+
+/**
  * Split a command line into its words, taking the quotes into account.
  *
  * A quoted word is one word, whatever is inside it, and a word that is only

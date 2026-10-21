@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
+import { restrictToOwner } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 import { LOCAL_CONFIG_FILE, locateConfigFiles } from "./load.js";
 
@@ -60,8 +61,15 @@ export const persistRule = async (options: {
   existing["permissions"] = permissions;
 
   try {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, `${JSON.stringify(existing, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    // The mode of a file is only set when it is created, so it is set again
+    // for a file that was already there.
+    await restrictToOwner(dirname(path), 0o700);
+    await restrictToOwner(path, 0o600);
   } catch (error) {
     return err(
       flowError("invalid_request", `The rule could not be saved to '${path}'.`, {
@@ -99,9 +107,13 @@ export const writeConfigFile = async (
   document: unknown,
 ): Promise<Result<void, FlowError>> => {
   try {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify(document, null, 2)}\n`, "utf8");
-    return ok(undefined);
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, `${JSON.stringify(document, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await restrictToOwner(dirname(path), 0o700);
+    await restrictToOwner(path, 0o600);
   } catch (error) {
     return err(
       flowError("invalid_request", `The configuration could not be written to '${path}'.`, {
@@ -110,6 +122,8 @@ export const writeConfigFile = async (
       }),
     );
   }
+
+  return ok(undefined);
 };
 
 /** The default place a personal configuration file lives. */

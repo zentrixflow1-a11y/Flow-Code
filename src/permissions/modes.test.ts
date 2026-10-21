@@ -243,6 +243,24 @@ describe("a git command that writes", () => {
   });
 });
 
+describe("a command that is only allowed to read", () => {
+  it("is not read-only when it can run another program", () => {
+    expect(isReadOnlyCommand("fd -x rm", "linux")).toBe(false);
+    expect(isReadOnlyCommand("fd -X curl https://example.test", "linux")).toBe(false);
+    expect(isReadOnlyCommand("rg --pre 'sh -c id' .", "linux")).toBe(false);
+  });
+
+  it("is not read-only when it can write a file", () => {
+    expect(isReadOnlyCommand("find . -fprint0 out", "linux")).toBe(false);
+    expect(isReadOnlyCommand("tree -o out.txt", "linux")).toBe(false);
+  });
+
+  it("is not read-only when the program is only named like one", () => {
+    expect(isReadOnlyCommand("/tmp/evil/ls", "linux")).toBe(false);
+    expect(isReadOnlyCommand("./ls", "linux")).toBe(false);
+  });
+});
+
 describe("the read-only gate on Windows", () => {
   it("allows the handful of commands that mean the same thing everywhere", () => {
     expect(isReadOnlyCommand("ls -la", "win32")).toBe(true);

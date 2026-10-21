@@ -107,4 +107,24 @@ describe("isSensitivePath", () => {
     expect(isSensitivePath("/project/src/environmentals.ts")).toBe(false);
     expect(isSensitivePath("/project/config.json")).toBe(false);
   });
+
+  it("leaves ordinary source files alone", () => {
+    // A file called `secrets.ts` is a source file, not a secret.
+    expect(isSensitivePath("/project/src/secrets.ts")).toBe(false);
+    expect(isSensitivePath("/project/src/credentials.ts")).toBe(false);
+    expect(isSensitivePath("/project/src/auth.ts")).toBe(false);
+  });
+
+  it("still finds the credential files by those names", () => {
+    expect(isSensitivePath("/project/secrets.yaml")).toBe(true);
+    expect(isSensitivePath("/project/credentials.json")).toBe(true);
+    expect(isSensitivePath("/project/client_secret.json")).toBe(true);
+    expect(isSensitivePath("/project/service-account.json")).toBe(true);
+    expect(isSensitivePath("/project/application_default_credentials.json")).toBe(true);
+    expect(isSensitivePath("/project/terraform.tfvars")).toBe(true);
+  });
+
+  it("does not mistake a public key for a private one", () => {
+    expect(isSensitivePath("/project/id_rsa.pub")).toBe(false);
+  });
 });

@@ -14,7 +14,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
-import { realpathBestEffort } from "../util/paths.js";
+import { realpathBestEffort, restrictToOwner } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 
 /** The file the trusted directories are kept in. */
@@ -51,6 +51,9 @@ export const PROJECT_FILES: readonly string[] = [
   ".flowcode/hooks.json",
   ".flowcode/mcp.json",
   ".flowcode/agents",
+  ".flowcode/rules",
+  "FLOWCODE.md",
+  "AGENTS.md",
 ];
 
 /** The trust store, as it is written to disk. */
@@ -118,6 +121,10 @@ export const writeTrustStore = async (
       encoding: "utf8",
       mode: 0o600,
     });
+    // The mode of a file is only set when it is created, so it is set again
+    // for a store that was already there.
+    await restrictToOwner(join(home, ".flowcode"), 0o700);
+    await restrictToOwner(path, 0o600);
     return ok(undefined);
   } catch (error) {
     return err(

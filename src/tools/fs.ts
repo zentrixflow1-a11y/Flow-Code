@@ -210,7 +210,7 @@ export const writeFileTool: ToolDefinition<z.infer<typeof writeFileArgs>> = {
     }
 
     const path = resolved.value;
-    if (isProtectedPath(path)) {
+    if (isProtectedPath(path) || isSensitivePath(path)) {
       return { ok: false, error: refuseProtectedWrite(path) };
     }
 
@@ -270,7 +270,7 @@ export const editFileTool: ToolDefinition<z.infer<typeof editFileArgs>> = {
     }
 
     const path = resolved.value;
-    if (isProtectedPath(path)) {
+    if (isProtectedPath(path) || isSensitivePath(path)) {
       return { ok: false, error: refuseProtectedWrite(path) };
     }
 

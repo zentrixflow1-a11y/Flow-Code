@@ -235,7 +235,11 @@ export class FlowSession {
     const session = new FlowSession(options, config, built.value, log);
     session.workspaceTrusted = trust.trusted;
     session.trustNote = trust.reason;
-    session.projectInstructions = (await readProjectInstructions(options.cwd)).text;
+    // The project's instructions go into the model's context, so they are
+    // read only when the directory is trusted.
+    session.projectInstructions = trust.trusted
+      ? (await readProjectInstructions(options.cwd)).text
+      : "";
 
     // The permission engine compares a rule's specifier with a resolved path,
     // so the workspace root has to be resolved too. On macOS a project
@@ -401,6 +405,9 @@ export class FlowSession {
           // the same redactor and the same guard. It cannot spawn another
           // sub-agent, though: that is how a session turns into a fork bomb.
           toolContext: createToolContext(shared),
+          // The same hooks run for the sub-agent, so a hook that guards a
+          // tool guards it here too.
+          hooks: this.hooks,
           ui: this.#ui,
         });
       },
@@ -437,6 +444,12 @@ export class FlowSession {
    * @param prompt - The user's message, when the run starts with one.
    */
   async run(prompt?: string): Promise<AgentResult> {
+    // The project's own instructions and the MCP servers' instructions both
+    // go into the model's context.
+    const instructions = [this.projectInstructions, this.#mcpInstructions]
+      .filter((text): text is string => text !== undefined && text !== "")
+      .join("\n\n");
+
     const agentOptions: AgentOptions = {
       provider: this.provider,
       registry: this.registry,
@@ -452,9 +465,7 @@ export class FlowSession {
       ui: this.#ui,
       ...(this.hooks.length === 0 ? {} : { hooks: this.hooks }),
       toolSchemaBudget: this.config.tools.maxToolSchemaBytes,
-      ...(this.#mcpInstructions === undefined
-        ? {}
-        : { extraInstructions: this.#mcpInstructions }),
+      ...(instructions === "" ? {} : { extraInstructions: instructions }),
       ...(this.#options.signal === undefined ? {} : { signal: this.#options.signal }),
       ...(this.#options.maxTurns === undefined ? {} : { maxTurns: this.#options.maxTurns }),
     };

@@ -19,6 +19,7 @@ import { SessionLog } from "../session/log.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { ToolContext } from "../tools/types.js";
 import { err, ok, type Result } from "../util/result.js";
+import type { HookDefinition } from "../hooks/runner.js";
 import type { AgentDefinition } from "./definitions.js";
 
 /** How to run a sub-agent. */
@@ -39,6 +40,13 @@ export interface SubAgentOptions {
   readonly permissionContext: PermissionContext;
   /** What the tools need from the host. */
   readonly toolContext: ToolContext;
+  /**
+   * The hooks the project configures.
+   *
+   * A sub-agent runs the same hooks as the agent that spawned it, so a hook
+   * that guards a tool guards it here too.
+   */
+  readonly hooks?: readonly HookDefinition[];
   /** The interface, for progress. */
   readonly ui: AgentUi;
   /** Where to write the sub-agent's session log. */
@@ -87,6 +95,9 @@ export const runSubAgent = async (
     permissionContext: options.permissionContext,
     toolContext: options.toolContext,
     ui: options.ui,
+    ...(options.hooks === undefined || options.hooks.length === 0
+      ? {}
+      : { hooks: options.hooks }),
     ...(definition.maxTurns === undefined ? {} : { maxTurns: definition.maxTurns }),
   };
 

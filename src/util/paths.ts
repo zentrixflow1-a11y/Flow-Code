@@ -5,10 +5,34 @@
  * covers both the path the model asked for and the path it actually resolves
  * to, so a symlink inside the workspace cannot be used to reach outside it.
  */
-import { realpath } from "node:fs/promises";
+import { chmod, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
 import { err, ok, type Result } from "./result.js";
+
+/**
+ * Make a file or a directory private to its owner.
+ *
+ * The mode of a file is only set when the file is created, so a file that
+ * was already there — a session log from an earlier build, say — keeps the
+ * mode it had. This sets it again.
+ *
+ * The promise only holds on the platforms that have permissions: on Windows
+ * a file belongs to its owner's account and to nobody else, whatever the
+ * mode says.
+ *
+ * @param path - The path to restrict.
+ * @param mode - The mode to set.
+ */
+export const restrictToOwner = async (
+  path: string,
+  mode: 0o600 | 0o700,
+): Promise<void> => {
+  if (process.platform === "win32") {
+    return;
+  }
+  await chmod(path, mode).catch(() => undefined);
+};
 
 /** Where a path may be read from or written to. */
 export interface PathPolicy {
@@ -194,12 +218,12 @@ export const SENSITIVE_DIRECTORIES: readonly string[] = [
   ".kube",
   ".docker",
   ".password-store",
-  ".config/gcloud",
 ];
 
 /** File names that hold credentials. */
 export const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
   /^\.env(\..*)?$/i,
+  /^\.envrc$/i,
   /^\.npmrc$/i,
   /^\.yarnrc(\.yml)?$/i,
   /^\.netrc$/i,
@@ -213,11 +237,11 @@ export const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
   /\.key$/i,
   /\.p12$/i,
   /\.pfx$/i,
-  /^id_rsa/i,
-  /^id_ecdsa/i,
-  /^id_ed25519/i,
-  /^credentials(\.[a-z]+)?$/i,
-  /^secrets?(\.[a-z]+)?$/i,
+  /\.jks$/i,
+  /\.keystore$/i,
+  /^id_(rsa|ecdsa|dsa|ed25519)$/i,
+  /^(secrets?|credentials?|client[-_]?secrets?|service[-_]?accounts?|auth|application[-_]default[-_]credentials)\.(json|ya?ml|toml|ini|env|xml)$/i,
+  /\.tfvars$/i,
   /\.secret$/i,
 ];
 

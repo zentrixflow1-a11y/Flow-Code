@@ -338,6 +338,8 @@ Until you answer yes:
 | `.flowcode/hooks.json` | Ignored — no hook runs |
 | `.flowcode/mcp.json` | Ignored — no server is started |
 | `.flowcode/agents/` | Ignored — no sub-agent is defined |
+| `.flowcode/rules/` | Ignored |
+| `FLOWCODE.md`, `AGENTS.md` | Ignored — the instructions do not reach the model |
 
 Headless mode never asks, because there is nobody to ask. It ignores the
 project's files and says so on standard error.
@@ -531,6 +533,9 @@ The rule is about the **path**, not about the tool. A credential file is not
 read by `read_file`, it is not returned by `grep_files`, it is not listed by
 `list_dir`, it is not offered by `glob_files`, and a command that names it is
 refused. There is no way around it by asking for it in a different way.
+
+The same files are not written to either, so a project cannot leave a
+credential in a place the agent will read later.
 
 That is a safety net, not a boundary: it recognises the names it knows. A
 secret in a file called `notes.txt` is still a secret, and the redactor is

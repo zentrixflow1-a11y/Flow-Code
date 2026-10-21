@@ -37,6 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A command could hide a credential behind a separator.** The refusal for a
+  command that named a credential file looked at the words of the command, so
+  `cat .env;id` and `cat .env>/tmp/out` slipped past it and printed the
+  secret. The command is now split the way a shell splits it.
+- **A read-only command could run a program.** `fd -x rm` deletes files,
+  `rg --pre` runs a command, `tree -o` writes a file, and `find -fprint0`
+  writes one too. Those options are refused now, and a program is no longer
+  accepted just because its name looks like an allowed one: `/tmp/evil/ls`
+  is not `ls`.
+- **A sub-agent ran without the project's hooks.** A `pre_tool_use` hook that
+  guarded a tool guarded the agent that spawned it and not the sub-agent.
+  Both run the same hooks now.
+- **A hook that ran out of time allowed the action.** The code said a hook
+  that times out blocks when it was meant to stop the action, and it did the
+  opposite. It blocks now.
 - **A protected path was not protected when its case was not.** The check on
   the path's segments compared them exactly, so `.GIT` and `.FlowCode` were
   writable. The comparison ignores case now.
@@ -107,6 +122,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The project's instructions reach the model.** `FLOWCODE.md` was read and
+  then never passed on, so a project could tell the agent how to work and
+  the agent never heard. They are part of the request now — and, because
+  they go into the model's context, they are read only when the directory
+  has been trusted, like the rest of the project's files.
+- **A setting that is not there is ignored.** A configuration file with
+  `"permissions": null` used to throw. A file written by hand is now read
+  the way it reads: a setting of the wrong type is ignored, not carried
+  along.
 - **The version lives in `package.json` and nowhere else.** `src/version.ts`
   reads it from there, the session log records it, and a test checks that the
   changelog's latest heading names the same version. The package said `0.1.0`

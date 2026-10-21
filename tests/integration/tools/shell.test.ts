@@ -101,6 +101,28 @@ describe("the shell tool", () => {
     }
   });
 
+  it("refuses a command that hides the credential behind a separator", async () => {
+    await workspace.write(".env", "SECRET_TOKEN=hunter2\n");
+
+    for (const command of [
+      "cat .env;id",
+      "cat .env&&id",
+      "cat .env|id",
+      "cat .env>/tmp/out",
+    ]) {
+      const result = await executeTool(
+        runCommandTool,
+        { command },
+        workspace.context,
+      );
+
+      expect(result.ok, command).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("permission_denied");
+      }
+    }
+  });
+
   it("stops a command that runs too long", async () => {
     const result = await executeTool(
       runCommandTool,

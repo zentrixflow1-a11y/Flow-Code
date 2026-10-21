@@ -13,6 +13,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
+import { restrictToOwner } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 import { identityRedactor, type Redactor } from "../util/redact.js";
 import {
@@ -84,6 +85,10 @@ export class SessionLog {
       encoding: "utf8",
       mode: SESSION_LOG_MODE,
     });
+    // The mode of a file is only set when it is created, so it is set again
+    // for a log that was already there.
+    await restrictToOwner(dirname(path), SESSION_DIRECTORY_MODE);
+    await restrictToOwner(path, SESSION_LOG_MODE);
 
     const log = new SessionLog(path, full, options.redact ?? identityRedactor);
     log.#events.push({ type: "session.start", data: full });
@@ -113,6 +118,13 @@ export class SessionLog {
     );
     log.#events.push(...read.value.events);
     log.#seq = read.value.events.length;
+
+    // A log written by an earlier build may have a wider mode. It is
+    // narrowed again, so resuming a session does not leave a readable file
+    // behind.
+    await restrictToOwner(dirname(path), SESSION_DIRECTORY_MODE);
+    await restrictToOwner(path, SESSION_LOG_MODE);
+
     return ok(log);
   }
 
@@ -296,6 +308,8 @@ export const writeSessionFile = async (
     encoding: "utf8",
     mode: SESSION_LOG_MODE,
   });
+  await restrictToOwner(dirname(path), SESSION_DIRECTORY_MODE);
+  await restrictToOwner(path, SESSION_LOG_MODE);
 };
 
 /**

@@ -8,7 +8,7 @@
  */
 import { flowError, type FlowError } from "../errors.js";
 import { isSensitivePath } from "../util/paths.js";
-import { commandWords } from "../util/text.js";
+import { commandSegments, commandWords } from "../util/text.js";
 
 /**
  * The error a tool returns when it refuses a file that holds a secret.
@@ -29,13 +29,29 @@ export const refuseSensitivePath = (path: string): FlowError =>
 /**
  * The words of a command that name a file that holds a secret.
  *
+ * The command is split the way a shell splits it, and each word is cut at
+ * the first character that ends it, so `cat .env;id` and `cat .env>/tmp/x`
+ * are caught as well as `cat .env`.
+ *
  * This is best effort: it sees the words of the command, not what the shell
  * will do with them.
  *
  * @param command - The command line.
  */
-export const sensitiveWords = (command: string): string[] =>
-  commandWords(command).filter((word) => isSensitivePath(word));
+export const sensitiveWords = (command: string): string[] => {
+  const found: string[] = [];
+
+  for (const segment of commandSegments(command)) {
+    for (const word of commandWords(segment)) {
+      const name = word.split(/[<>|]/)[0] ?? "";
+      if (name !== "" && isSensitivePath(name)) {
+        found.push(word);
+      }
+    }
+  }
+
+  return found;
+};
 
 /**
  * The error a tool returns when it refuses a command that names a secret.

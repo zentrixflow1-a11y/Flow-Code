@@ -246,12 +246,19 @@ export const runEventHooks = async (
     const outcome = await runHook(
       hook,
       { event, ...payload },
-      { cwd: options.cwd, env: options.env },
+      {
+        cwd: options.cwd,
+        env: options.env,
+        blocking: BLOCKING_HOOK_EVENTS.has(event),
+      },
     );
 
     if (!outcome.ok) {
       if (BLOCKING_HOOK_EVENTS.has(event)) {
-        blocked = outcome.reason;
+        // The first hook that blocks gives the reason.
+        if (blocked === undefined) {
+          blocked = outcome.reason;
+        }
         continue;
       }
       // The action has already happened, so a hook that failed afterwards is
@@ -298,6 +305,13 @@ export const runHook = async (
     readonly cwd: string;
     readonly env?: NodeJS.ProcessEnv;
     readonly timeoutMs?: number;
+    /**
+     * Whether the hook was meant to stop the action.
+     *
+     * A hook that runs out of time has not approved anything, so it blocks
+     * when it was the one meant to stop it.
+     */
+    readonly blocking?: boolean;
   },
 ): Promise<HookOutcome> => {
   const timeout = hook.timeoutMs ?? options.timeoutMs ?? 5000;
@@ -330,7 +344,14 @@ export const runHook = async (
       child.kill();
       // A hook that runs out of time does not block the action, unless it
       // was the one that was meant to stop it.
-      finish({ ok: true });
+      finish(
+        options.blocking === true
+          ? {
+              ok: false,
+              reason: `The hook did not finish within ${timeout}ms, so it has not approved the action.`,
+            }
+          : { ok: true },
+      );
     }, timeout);
 
     child.stdout.setEncoding("utf8");

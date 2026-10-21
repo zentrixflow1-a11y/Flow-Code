@@ -189,8 +189,9 @@ const readConfigFile = async (path: string): Promise<Result<PartialConfig, FlowE
     return ok({});
   }
 
+  let parsed: unknown;
   try {
-    return ok(JSON.parse(text) as PartialConfig);
+    parsed = JSON.parse(text) as unknown;
   } catch (error) {
     return err(
       flowError("invalid_request", `The configuration file '${path}' is not valid JSON.`, {
@@ -200,7 +201,133 @@ const readConfigFile = async (path: string): Promise<Result<PartialConfig, FlowE
       }),
     );
   }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return err(
+      flowError("invalid_request", `The configuration file '${path}' is not an object.`, {
+        retryable: false,
+        remediation: "Delete the file to fall back to the defaults.",
+      }),
+    );
+  }
+
+  return ok(normaliseLayer(parsed as PartialConfig));
 };
+
+/** Whether a value is a plain object. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Keep only the settings a layer is allowed to hold.
+ *
+ * A configuration file is written by hand, so `"permissions": null` has to
+ * mean "no permissions", not a crash — and a setting of the wrong type has
+ * to be ignored rather than carried along.
+ *
+ * @param layer - The layer as it was read from disk.
+ */
+const normaliseLayer = (layer: PartialConfig): PartialConfig => {
+  const out: PartialConfig = {};
+  const source = layer as Record<string, unknown>;
+
+  if (isRecord(source["provider"])) {
+    const provider = source["provider"];
+    out.provider = {
+      ...(typeof provider["provider"] === "string"
+        ? { provider: provider["provider"] }
+        : {}),
+      ...(typeof provider["baseUrl"] === "string"
+        ? { baseUrl: provider["baseUrl"] }
+        : {}),
+      ...(typeof provider["model"] === "string"
+        ? { model: provider["model"] }
+        : {}),
+      ...(typeof provider["apiKeyEnv"] === "string"
+        ? { apiKeyEnv: provider["apiKeyEnv"] }
+        : {}),
+    };
+  }
+
+  if (isRecord(source["permissions"])) {
+    const permissions = source["permissions"];
+    out.permissions = {
+      ...(typeof permissions["mode"] === "string"
+        ? { mode: permissions["mode"] }
+        : {}),
+      ...(stringList(permissions["allow"]) === undefined
+        ? {}
+        : { allow: stringList(permissions["allow"]) }),
+      ...(stringList(permissions["ask"]) === undefined
+        ? {}
+        : { ask: stringList(permissions["ask"]) }),
+      ...(stringList(permissions["deny"]) === undefined
+        ? {}
+        : { deny: stringList(permissions["deny"]) }),
+      ...(stringList(permissions["additionalDirectories"]) === undefined
+        ? {}
+        : { additionalDirectories: stringList(permissions["additionalDirectories"]) }),
+    };
+  }
+
+  if (isRecord(source["tools"])) {
+    const tools = source["tools"];
+    out.tools = {
+      ...(typeof tools["maxToolSchemaBytes"] === "number"
+        ? { maxToolSchemaBytes: tools["maxToolSchemaBytes"] }
+        : {}),
+      ...(typeof tools["serialiseMixedBatches"] === "boolean"
+        ? { serialiseMixedBatches: tools["serialiseMixedBatches"] }
+        : {}),
+      ...(typeof tools["commandTimeoutMs"] === "number"
+        ? { commandTimeoutMs: tools["commandTimeoutMs"] }
+        : {}),
+    };
+  }
+
+  if (isRecord(source["context"])) {
+    const context = source["context"];
+    out.context = {
+      ...(typeof context["autoCompactRatio"] === "number"
+        ? { autoCompactRatio: context["autoCompactRatio"] }
+        : {}),
+      ...(typeof context["keepTurns"] === "number"
+        ? { keepTurns: context["keepTurns"] }
+        : {}),
+      ...(typeof context["defaultContextWindow"] === "number"
+        ? { defaultContextWindow: context["defaultContextWindow"] }
+        : {}),
+    };
+  }
+
+  if (isRecord(source["security"])) {
+    const security = source["security"];
+    const sandbox = security["sandbox"];
+    if (sandbox === "auto" || sandbox === "off") {
+      out.security = { sandbox };
+    }
+  }
+
+  if (typeof source["webEnabled"] === "boolean") {
+    out.webEnabled = source["webEnabled"];
+  }
+
+  if (typeof source["shell"] === "string") {
+    out.shell = source["shell"];
+  }
+
+  return out;
+};
+
+/**
+ * Read a list of strings, ignoring anything else.
+ *
+ * @param value - The value to read.
+ */
+const stringList = (value: unknown): string[] | undefined =>
+  Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : undefined;
 
 /** Merge the configuration layers, lowest precedence first. */
 export const mergeLayers = (layers: readonly PartialConfig[]): FlowCodeConfig => {

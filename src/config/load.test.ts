@@ -315,6 +315,43 @@ describe("a project's own configuration", () => {
     expect(result.value.permissions.ask).toContain("run_command:rm *");
     expect(result.value.permissions.deny).toContain("write_file:**/secrets/**");
   });
+
+  it("ignores a setting that is not there", async () => {
+    await writeProjectConfig({ permissions: null, provider: null });
+
+    const result = await loadConfig({
+      home,
+      cwd: project,
+      env: {},
+      project: "trusted",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.permissions.mode).toBe("ask");
+    expect(result.value.provider.provider).toBe("ollama");
+  });
+
+  it("ignores a setting of the wrong type", async () => {
+    await writeProjectConfig({
+      permissions: { allow: "not a list", deny: ["run_command:*"] },
+      provider: { model: 42 },
+    });
+
+    const result = await loadConfig({
+      home,
+      cwd: project,
+      env: {},
+      project: "trusted",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.permissions.allow).toEqual([]);
+    expect(result.value.provider.model).toBeUndefined();
+  });
 });
 
 describe("effectiveRules", () => {

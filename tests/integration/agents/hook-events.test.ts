@@ -42,8 +42,17 @@ describe("the session hook events", () => {
 
   afterEach(async () => {
     await server.stop();
-    await rm(home, { recursive: true, force: true });
-    await rm(workspace, { recursive: true, force: true });
+    // A hook that was killed may still be holding the directory open for a
+    // moment, so the removal is retried before it is given up on.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        await rm(home, { recursive: true, force: true, maxRetries: 3 });
+        await rm(workspace, { recursive: true, force: true, maxRetries: 3 });
+        return;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
   });
 
   const writeHooks = async (hooks: unknown): Promise<void> => {
@@ -141,5 +150,72 @@ describe("the session hook events", () => {
 
     const { existsSync } = await import("node:fs");
     expect(existsSync(marker)).toBe(true);
+  });
+
+  it("blocks a tool when a pre_tool_use hook runs out of time", async () => {
+    await writeHooks({
+      pre_tool_use: [
+        {
+          matcher: "read_file",
+          command: "node -e \"setTimeout(() => {}, 1000)\"",
+          timeoutMs: 200,
+        },
+      ],
+    });
+
+    const result = await createSession();
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    await result.session.run("read the readme");
+
+    // The tool was refused, and the reason reached the model.
+    const { readFile } = await import("node:fs/promises");
+    const log = await readFile(result.session.log.path, "utf8");
+    expect(log).toContain("did not finish");
+    await result.session.close();
+  });
+
+  it("runs the hooks for a sub-agent too", async () => {
+    const marker = join(workspace, "hook-ran.txt");
+    await writeHooks({
+      pre_tool_use: [
+        {
+          matcher: "read_file",
+          command: `node -e "require('node:fs').writeFileSync('${marker.replace(/\\/g, "\\\\")}','ran')"`,
+        },
+      ],
+    });
+
+    await mkdir(join(workspace, ".flowcode", "agents"), { recursive: true });
+    await writeFile(
+      join(workspace, ".flowcode", "agents", "reviewer.md"),
+      [
+        "---",
+        "name: reviewer",
+        "description: Reviews the project",
+        "tools: read_file",
+        "---",
+        "You review a project.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await createSession();
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    // The parent only spawns the sub-agent; the sub-agent is the one that
+    // reads a file, so the hook only runs if the sub-agent is guarded too.
+    const run = await result.session.run("have the reviewer look at it");
+    expect(run.reason).toBe("completed");
+
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(marker)).toBe(true);
+    await result.session.close();
   });
 });
