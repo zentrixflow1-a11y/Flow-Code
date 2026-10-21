@@ -572,6 +572,11 @@ Without a terminal, one task is carried out and the answer is printed. Add
 }
 ```
 
+> **Through `npx`, use the long form.** `npx` reads `-p` as its own
+> `--package` flag, so `npx flow-code-cli --print "task"` works and
+> `npx flow-code-cli -p "task"` does not. The installed `flowcode` command has
+> no such problem.
+
 Useful flags:
 
 | Flag | What it does |

@@ -6,11 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { runAgent } from "./loop.js";
+import { runAgent, buildRequest } from "./loop.js";
 import type { AgentOptions, AgentUi, ApprovalDecision } from "./types.js";
 import { SessionLog } from "../session/log.js";
 import { deriveMessages } from "../session/replay.js";
 import { ToolRegistry } from "../tools/registry.js";
+import { createDefaultRegistry } from "../tools/index.js";
 import type { ToolDefinition, ToolResult } from "../tools/types.js";
 import type { ModelInfo, ModelProvider, ProviderEvent } from "../providers/types.js";
 import { ok, type Result } from "../util/result.js";
@@ -280,6 +281,51 @@ describe("the agent loop", () => {
     expect(messages.find((message) => message.role === "tool")?.content).toContain(
       "no tool called 'nope'",
     );
+  });
+
+  it("offers every built-in tool, even when a rule names one of them", () => {
+    // A deny rule with a specifier blocks that one call. It must not take
+    // the whole tool out of the model's context.
+    const registry = new ToolRegistry();
+    for (const tool of createDefaultRegistry().list()) {
+      registry.register(tool);
+    }
+
+    const provider = scriptedProvider([[{ type: "done", reason: "stop" }]]);
+    const request = buildRequest(
+      buildOptions(provider, quietUi(), {
+        registry,
+        rules: {
+          allow: [],
+          ask: [],
+          deny: ["read_file:**/.env", "write_file:**/.env"],
+        },
+      }),
+    );
+
+    const names = (request.tools ?? []).map((tool) => tool.name);
+    expect(names).toContain("read_file");
+    expect(names).toContain("write_file");
+    expect(names).toContain("grep_files");
+  });
+
+  it("takes a tool out of the context when a bare deny rule names it", () => {
+    const registry = new ToolRegistry();
+    for (const tool of createDefaultRegistry().list()) {
+      registry.register(tool);
+    }
+
+    const provider = scriptedProvider([[{ type: "done", reason: "stop" }]]);
+    const request = buildRequest(
+      buildOptions(provider, quietUi(), {
+        registry,
+        rules: { allow: [], ask: [], deny: ["read_file"] },
+      }),
+    );
+
+    const names = (request.tools ?? []).map((tool) => tool.name);
+    expect(names).not.toContain("read_file");
+    expect(names).toContain("grep_files");
   });
 
   it("stops when the model reports a failure", async () => {

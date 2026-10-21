@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A deny rule took a whole tool out of the model's context.** A rule with a
+  specifier, such as the built-in `read_file:**/.env`, blocked that one call —
+  but it also removed `read_file` from the tools the model was offered, so the
+  agent could not read a file at all. Only a rule that names a tool and
+  nothing else now removes it.
 - **The path sandbox compared a resolved path with an unresolved root.** On
   macOS a temporary directory is reached through `/var`, which is a symlink to
   `/private/var`, so every file in the workspace was refused. Both sides are

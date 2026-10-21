@@ -75,7 +75,9 @@ jobs:
           fi
 
           # Carry out a task with the packaged CLI, exactly as the README says.
-          OUT=$(cd "$RUNNER_TEMP/install" && npx flowcode -p "read the readme" \
+          # The binary is called directly rather than through npx, because npx
+          # reads "-p" as its own --package flag.
+          OUT=$(cd "$RUNNER_TEMP/install" && ./node_modules/.bin/flowcode -p "read the readme" \
             --provider custom --base-url "http://127.0.0.1:${PORT}/v1" \
             --model mock-model)
           echo "$OUT"

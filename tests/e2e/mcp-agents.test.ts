@@ -185,6 +185,10 @@ describe("a session with a hook", () => {
     expect(status).toBe(0);
 
     const log = await readSessionLog(home);
+    if (!log.includes("the hook said no")) {
+      // The log is printed so that a failure says what actually happened.
+      process.stderr.write(`\n---SESSION LOG---\n${log}\n---END---\n`);
+    }
     expect(log).toContain("the hook said no");
   });
 

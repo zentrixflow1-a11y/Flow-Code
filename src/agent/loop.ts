@@ -23,6 +23,7 @@ import { buildSystemPrompt } from "../context/system-prompt.js";
 import { decidePermission } from "../permissions/engine.js";
 import { isReadOnlyCommand } from "../permissions/modes.js";
 import { hookApplies, runHook } from "../hooks/runner.js";
+import { parseRule } from "../permissions/rules.js";
 import type { PermissionRequest } from "../permissions/types.js";
 import type { ChatMessage, ToolCall } from "../providers/types.js";
 import { deriveMessages } from "../session/replay.js";
@@ -146,7 +147,6 @@ export const buildRequest = (options: AgentOptions) => {
   const messages: ChatMessage[] = deriveMessages(options.session.events);
   const denied = deniedTools(options.rules);
   const advertised = options.registry.advertised(denied);
-
   const budget = options.toolSchemaBudget ?? 0;
   const fitted = fitToBudget(advertised, budget);
 
@@ -178,14 +178,15 @@ export const buildRequest = (options: AgentOptions) => {
   });
 };
 
-/** The tool names a bare deny rule removes. */
+/** The tool names a bare deny rule removes from the model's context. */
 const deniedTools = (rules: { readonly deny: readonly string[] }) => {
   const denied = new Set<string>();
   for (const rule of rules.deny) {
-    const colon = rule.indexOf(":");
-    const tool = colon === -1 ? rule : rule.slice(0, colon);
-    if (tool !== "" && tool !== "*") {
-      denied.add(tool);
+    const parsed = parseRule(rule);
+    // Only a rule that names a tool and nothing else removes the tool. A rule
+    // with a specifier blocks that one call, not the whole tool.
+    if (parsed.spec === undefined && parsed.tool !== "" && parsed.tool !== "*") {
+      denied.add(parsed.tool);
     }
   }
   return denied;
