@@ -207,7 +207,9 @@ export const runHook = async (
   return new Promise<HookOutcome>((resolve) => {
     const child = spawn(hook.command, {
       cwd: options.cwd,
-      env: options.env,
+      // The session's environment is layered over the process's own, so that a
+      // session cannot accidentally take the PATH away from a hook.
+      env: { ...process.env, ...options.env },
       shell: true,
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
@@ -242,8 +244,20 @@ export const runHook = async (
       stderr += text;
     });
 
-    child.on("error", () => finish({ ok: true }));
+    child.on("error", (error) => {
+      // A hook that cannot be run at all has not approved anything. It
+      // blocks, rather than quietly allowing what it was meant to stop.
+      finish({
+        ok: false,
+        reason: `The hook could not be run: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    });
     child.on("close", (code) => {
+      if (code === 0) {
+        finish({ ok: true, ...parseHookOutput(stdout) });
+        return;
+      }
+
       if (code === 2) {
         // A hook that blocks says why. Its standard error is the reason, and
         // its standard output is the fallback, because a hook may well print
@@ -255,7 +269,18 @@ export const runHook = async (
         });
         return;
       }
-      finish({ ok: true, ...parseHookOutput(stdout) });
+
+      // A hook that failed has not approved anything either. It is treated
+      // the same way as a refusal, so that a broken hook fails closed rather
+      // than quietly allowing what it was meant to stop.
+      const detail = stderr.trim() === "" ? stdout.trim() : stderr.trim();
+      finish({
+        ok: false,
+        reason:
+          detail === ""
+            ? `The hook failed with exit code ${code}.`
+            : `The hook failed with exit code ${code}: ${detail}`,
+      });
     });
 
     child.stdin.on("error", () => undefined);

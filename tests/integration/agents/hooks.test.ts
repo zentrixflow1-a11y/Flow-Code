@@ -228,6 +228,21 @@ describe("hooks", () => {
     }
   });
 
+  it("blocks the action when the hook cannot be run at all", async () => {
+    // A hook that cannot be run has not approved anything. It has to block,
+    // rather than quietly allow what it was meant to stop.
+    const outcome = await runHook(
+      { event: "pre_tool_use", command: "a-command-that-does-not-exist" },
+      { tool: "read_file" },
+      { cwd: workspace },
+    );
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.reason).toMatch(/failed|could not be run/i);
+    }
+  });
+
   it("reads the extra context a hook asked for", () => {
     expect(parseHookOutput('{"additional_context":"remember this"}')).toEqual({
       context: "remember this",

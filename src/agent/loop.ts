@@ -395,7 +395,13 @@ const runHooks = async (
     );
 
     if (!outcome.ok) {
-      blocked = outcome.reason;
+      if (event === "pre_tool_use") {
+        blocked = outcome.reason;
+        continue;
+      }
+      // The action has already happened, so a hook that failed afterwards is
+      // reported to the model rather than blocking anything.
+      contexts.push(`A hook failed: ${outcome.reason}`);
       continue;
     }
     if (outcome.context !== undefined) {

@@ -183,7 +183,7 @@ const runToCompletion = async (
   const startedAt = Date.now();
   const child = spawn(invocation.command, [...invocation.args], {
     cwd,
-    env: context.env,
+    env: { ...process.env, ...context.env },
     windowsHide: true,
     detached: context.platform !== "win32",
   });
@@ -252,7 +252,7 @@ const startBackground = async (
 ): Promise<ToolResult> => {
   const child = spawn(invocation.command, [...invocation.args], {
     cwd,
-    env: context.env,
+    env: { ...process.env, ...context.env },
     windowsHide: true,
     detached: context.platform !== "win32",
   });
