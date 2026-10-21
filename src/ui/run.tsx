@@ -100,11 +100,17 @@ export const runInteractive = async (
     }
   };
 
+  const stdout = options.stdout ?? process.stdout;
+
   const renderOptions = {
     exitOnCtrlC: false,
+    // Ink treats a CI environment as non-interactive, which would leave the
+    // interface undrawn until the session ended. A terminal is a terminal,
+    // whatever the environment says.
+    interactive: Boolean(stdout.isTTY),
     // The console is patched so that a stray log cannot corrupt the
-    // display. On a stand-in terminal â€” which is how the interface is
-    // tested â€” the console is left alone.
+    // display. On a stand-in terminal — which is how the interface is
+    // tested — the console is left alone.
     patchConsole: options.stdout === undefined,
     ...(options.stdout === undefined ? {} : { stdout: options.stdout }),
     ...(options.stdin === undefined ? {} : { stdin: options.stdin }),

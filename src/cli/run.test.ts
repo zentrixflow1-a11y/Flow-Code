@@ -66,4 +66,13 @@ describe("runCli", () => {
     expect(status).toBe(EXIT.failure);
     expect(deps.errLines.join("\n")).toContain("unknown permission mode");
   });
+
+  it("says so when there is no terminal for the interactive session", async () => {
+    const deps = capture();
+    // No terminal is attached, so the interactive session cannot be drawn.
+    const status = await runCli([], deps);
+    expect(status).toBe(EXIT.failure);
+    expect(deps.errLines.join("\n")).toContain("needs a terminal");
+    expect(deps.errLines.join("\n")).toContain("-p");
+  });
 });

@@ -161,6 +161,15 @@ const runInteractiveSession = async (
     return EXIT.failure;
   }
 
+  // The interactive interface needs a terminal to draw on. Saying so is far
+  // better than drawing into a pipe.
+  const stdout = deps.stdout ?? process.stdout;
+  if (stdout.isTTY !== true) {
+    deps.err(`${BINARY_NAME}: the interactive session needs a terminal.`);
+    deps.err(`${BINARY_NAME}: use \`${BINARY_NAME} -p "<task>"\` to carry out one task without one.`);
+    return EXIT.failure;
+  }
+
   const session = await FlowSession.create({
     cwd: deps.cwd,
     ...(deps.home === undefined ? {} : { home: deps.home }),

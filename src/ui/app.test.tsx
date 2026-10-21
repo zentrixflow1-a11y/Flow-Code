@@ -1,4 +1,4 @@
-import { render } from "ink";
+﻿import { render } from "ink";
 import React from "react";
 import { describe, expect, it } from "vitest";
 import { COMMANDS } from "../commands/registry.js";
@@ -24,7 +24,7 @@ const fakeTerminal = (): {
 
   const stdout = {
     // The callback is called, because Ink uses it to know that a write has
-    // been flushed — the exit promise is resolved from it.
+    // been flushed â€” the exit promise is resolved from it.
     write: (text: string, callback?: () => void): boolean => {
       output += text;
       callback?.();
@@ -120,6 +120,9 @@ const renderApp = async (
       stdin: terminal.stdin,
       exitOnCtrlC: false,
       patchConsole: false,
+      // Ink treats a CI environment as non-interactive, so the interface is
+      // asked for explicitly.
+      interactive: true,
     },
   );
 
@@ -158,6 +161,9 @@ const renderLiveApp = async (
       stdin: terminal.stdin,
       exitOnCtrlC: false,
       patchConsole: false,
+      // Ink treats a CI environment as non-interactive, so the interface is
+      // asked for explicitly.
+      interactive: true,
     },
   );
 
