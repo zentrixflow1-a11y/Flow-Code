@@ -188,19 +188,43 @@ describe("hooks", () => {
   });
 
   it("blocks the action when a hook exits with two", async () => {
+    // The hook is a script rather than a quoted command line, because the two
+    // shells disagree about what quotes mean. The exit code is set rather than
+    // forced, so the message on standard error is flushed before the process
+    // goes.
+    await writeFile(
+      join(workspace, "block.mjs"),
+      'process.stderr.write("the hook said no");\nprocess.exitCode = 2;\n',
+      "utf8",
+    );
+
     const outcome = await runHook(
-      {
-        event: "pre_tool_use",
-        // The same command on every platform: the two shells disagree about
-        // what separates commands.
-        command: `node -e "process.stderr.write('not allowed'); process.exit(2)"`,
-      },
+      { event: "pre_tool_use", command: "node block.mjs" },
       { tool: "read_file" },
       { cwd: workspace },
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
-      expect(outcome.reason).toContain("not allowed");
+      expect(outcome.reason).toContain("the hook said no");
+    }
+  });
+
+  it("reads the context a hook asked for", async () => {
+    await writeFile(
+      join(workspace, "context.mjs"),
+      'process.stdout.write(JSON.stringify({additional_context:"remember this"}));\n',
+      "utf8",
+    );
+
+    const outcome = await runHook(
+      { event: "post_tool_use", command: "node context.mjs" },
+      { tool: "read_file" },
+      { cwd: workspace },
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.context).toBe("remember this");
     }
   });
 

@@ -136,17 +136,19 @@ describe("a session with a hook", () => {
 
   it("blocks a tool when a hook refuses it", async () => {
     await mkdir(join(workspace, ".flowcode"), { recursive: true });
+    // The hook is a script rather than a quoted command line, because the two
+    // shells disagree about what quotes mean.
+    await writeFile(
+      join(workspace, "block.mjs"),
+      'process.stderr.write("the hook said no");\nprocess.exitCode = 2;\n',
+      "utf8",
+    );
     await writeFile(
       join(workspace, ".flowcode", "hooks.json"),
       JSON.stringify(
         {
           hooks: {
-            pre_tool_use: [
-              {
-                matcher: "read_file",
-                command: `node -e "process.stderr.write('the hook said no'); process.exit(2)"`,
-              },
-            ],
+            pre_tool_use: [{ matcher: "read_file", command: "node block.mjs" }],
           },
         },
         null,
@@ -189,16 +191,16 @@ describe("a session with a hook", () => {
   it("passes a hook's extra context to the model", async () => {
     await mkdir(join(workspace, ".flowcode"), { recursive: true });
     await writeFile(
+      join(workspace, "context.mjs"),
+      'process.stdout.write(JSON.stringify({additional_context:"the project uses tabs"}));\n',
+      "utf8",
+    );
+    await writeFile(
       join(workspace, ".flowcode", "hooks.json"),
       JSON.stringify(
         {
           hooks: {
-            post_tool_use: [
-              {
-                matcher: "read_file",
-                command: `node -e "process.stdout.write(JSON.stringify({additional_context:'the project uses tabs'}))"`,
-              },
-            ],
+            post_tool_use: [{ matcher: "read_file", command: "node context.mjs" }],
           },
         },
         null,

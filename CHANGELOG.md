@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   macOS a temporary directory is reached through `/var`, which is a symlink to
   `/private/var`, so every file in the workspace was refused. Both sides are
   now resolved before they are compared. There is a regression test for it.
+- **A path rule was compared against a path in a different form.** The engine
+  compares a root-relative specifier with a resolved path, so the workspace
+  root it was given had to be resolved too. Otherwise no rule matched
+  whenever the project directory was reached through a symlink.
 - **The interface was not drawn in a CI environment.** Ink treats a CI
   environment as non-interactive, so the terminal interface stayed blank until
   the session ended. Flow Code now asks for an interactive terminal whenever
@@ -44,6 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The terminal interface tests waited for a fixed number of milliseconds for
   the first frame. They now wait for the frame itself, so they do not depend
   on how fast the machine draws.
+- **A hook's reason could be lost.** A hook that blocked the action and
+  explained itself on standard error sometimes had the explanation dropped.
+  The reason now falls back to standard output, and the JSON a hook prints is
+  found inside whatever else it wrote.
+
+### Changed
+
+- **Flow Code now needs Node.js 22 or newer.** Ink 8 requires it, and the
+  package said it supported 20. Node 20 reached the end of its life in April
+  2026, so the floor now matches what the dependencies actually need. The
+  continuous integration matrix covers Node 22 and 24.
 
 ### Notes and deviations from `PLAN.md`
 
@@ -56,6 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   committed.
 - The **`scripts/` directory ships with the package**, so that a reader who
   installed Flow Code from npm can still point it at the mock MCP server.
+- The **Node.js floor is 22 rather than 20.11**, because Ink 8 needs it. The
+  plan's `fs.promises.glob` fallback is kept regardless, so the tool works
+  the same way on every supported version.
 
 ## [0.6.0] â€” M6 (MCP client, sub-agents, hooks)
 

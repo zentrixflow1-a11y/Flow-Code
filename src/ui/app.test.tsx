@@ -1,4 +1,4 @@
-﻿import { render } from "ink";
+import { render } from "ink";
 import React from "react";
 import { describe, expect, it } from "vitest";
 import { COMMANDS } from "../commands/registry.js";

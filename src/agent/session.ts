@@ -18,6 +18,7 @@ import type { ModelInfo, ModelProvider } from "../providers/types.js";
 import { createDefaultRegistry } from "../tools/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import { createRedactor } from "../util/redact.js";
+import { realpathBestEffort } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 import { readMcpConfig } from "../mcp/config.js";
 import { connectAll, type McpConnections } from "../mcp/client.js";
@@ -90,6 +91,8 @@ export class FlowSession {
 
   /** The instructions the MCP servers sent, if any did. */
   #mcpInstructions: string | undefined;
+  /** The workspace root with every symlink resolved. */
+  #resolvedCwd: string;
   /** The operating-system sandbox in use, when one is. */
   #sandbox: { readonly kind: SandboxKind; readonly roots: readonly string[] } | undefined;
 
@@ -97,8 +100,8 @@ export class FlowSession {
   readonly #home: string;
   readonly #env: NodeJS.ProcessEnv;
   #ui: AgentUi;
-
-  private constructor(options: FlowSessionOptions, config: FlowCodeConfig, provider: ModelProvider, log: SessionLog) {    this.#options = options;
+  private constructor(options: FlowSessionOptions, config: FlowCodeConfig, provider: ModelProvider, log: SessionLog) {
+    this.#options = options;
     this.#home = options.home ?? homedir();
     this.#env = options.env ?? process.env;
     this.config = config;
@@ -107,6 +110,7 @@ export class FlowSession {
     this.registry = createDefaultRegistry();
     this.rules = effectiveRules(config);
     this.#ui = options.ui ?? silentUi;
+    this.#resolvedCwd = options.cwd;
   }
 
   /**
@@ -180,6 +184,13 @@ export class FlowSession {
     const session = new FlowSession(options, config, built.value, log);
     session.projectInstructions = (await readProjectInstructions(options.cwd)).text;
 
+    // The permission engine compares a rule's specifier with a resolved path,
+    // so the workspace root has to be resolved too. On macOS a project
+    // directory is often reached through a symlink, and an unresolved root
+    // would never match a resolved path.
+    const resolvedCwd = (await realpathBestEffort(options.cwd)) ?? options.cwd;
+    session.#resolvedCwd = resolvedCwd;
+
     // The MCP servers, the sub-agents and the hooks are all optional. A
     // missing or broken one must not stop the session.
     const mcpConfig = await readMcpConfig({ cwd: options.cwd, home });
@@ -251,8 +262,8 @@ export class FlowSession {
       config: this.config,
       rules: this.rules,
       permissionContext: {
-        workspaceRoot: this.cwd,
-        cwd: this.cwd,
+        workspaceRoot: this.#resolvedCwd,
+        cwd: this.#resolvedCwd,
         home: this.#home,
       },
       toolContext: {
@@ -293,8 +304,8 @@ export class FlowSession {
             config: this.config,
             rules: this.rules,
             permissionContext: {
-              workspaceRoot: this.cwd,
-              cwd: this.cwd,
+              workspaceRoot: this.#resolvedCwd,
+              cwd: this.#resolvedCwd,
               home: this.#home,
             },
             toolContext: {

@@ -4,10 +4,10 @@
 
 # Flow Code
 
-**A local-first terminal AI coding harness. Bring your own model â€” local or hosted.**
+**A local-first terminal AI coding harness. Bring your own model Ã¢â‚¬â€ local or hosted.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](./LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.11-339933.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 
 </div>
@@ -97,7 +97,7 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for the detail, and
 
 ## Install
 
-**Requirements:** Node.js 20.11 or newer. No compiler, no native modules.
+**Requirements:** Node.js 22 or newer. No compiler, no native modules.
 
 ```bash
 npm i -g flow-code-cli
@@ -151,7 +151,7 @@ want one.
 **4. Ask for something.**
 
 ```text
-â€º find every place we log a password and tell me which ones are safe
+Ã¢â‚¬Âº find every place we log a password and tell me which ones are safe
 ```
 
 To pick a model later, use `/model`. To check everything is wired up, run
@@ -228,8 +228,8 @@ command line  >  environment  >  .flowcode/config.local.json  >  .flowcode/confi
 | --- | --- |
 | `~/.flowcode/config.json` | You, on this machine, everywhere |
 | `~/.flowcode/config.local.json` | You, on this machine, this project only |
-| `.flowcode/config.json` | The project â€” commit it, so your team shares it |
-| `.flowcode/config.local.json` | You, this project â€” do not commit it |
+| `.flowcode/config.json` | The project Ã¢â‚¬â€ commit it, so your team shares it |
+| `.flowcode/config.local.json` | You, this project Ã¢â‚¬â€ do not commit it |
 
 `config.local.json` is the personal one; add it to `.gitignore`. Permission
 rule *lists* merge across all four files, so a project can add a rule without
@@ -289,7 +289,7 @@ removing yours. Everything else is replaced by the higher-precedence file.
 | `context.defaultContextWindow` | The window to assume when the model does not say |
 | `security.sandbox` | `auto` to run commands in the operating system's sandbox, `off` to leave them alone |
 | `webEnabled` | Whether `web_fetch` may be used |
-| `shell` | `powershell`, `cmd` or `bash` â€” the platform default when unset |
+| `shell` | `powershell`, `cmd` or `bash` Ã¢â‚¬â€ the platform default when unset |
 
 ### Environment variables
 
@@ -386,7 +386,7 @@ A specifier with no wildcard also matches everything below it, so
 
 So rules can always *tighten* a decision, and only ever loosen it up to the
 ceiling the mode sets. A rule that names a tool and nothing else, like
-`run_command`, blocks the whole tool â€” and Flow Code then stops offering it to
+`run_command`, blocks the whole tool Ã¢â‚¬â€ and Flow Code then stops offering it to
 the model at all, so the model never asks for it.
 
 ### The modes
@@ -405,7 +405,7 @@ inside the tool itself, so a mistake in one layer is caught by the other.
 ### What is never written to
 
 `.git/`, `.flowcode/`, `.ssh/`, `.aws/`, `.gnupg/`, `.env` files, `*.pem`,
-`*.key`, `id_rsa` â€” in every mode, including `trust`. Writes are also confined
+`*.key`, `id_rsa` Ã¢â‚¬â€ in every mode, including `trust`. Writes are also confined
 to the workspace and any directory you have explicitly opened, and symlinks
 cannot be used to step outside it.
 
@@ -414,11 +414,11 @@ cannot be used to step outside it.
 When a tool needs your approval, Flow Code shows you what it wants to do and
 offers:
 
-- **allow once** â€” run it this time
-- **allow always** â€” run it this time, and remember the rule in
+- **allow once** Ã¢â‚¬â€ run it this time
+- **allow always** Ã¢â‚¬â€ run it this time, and remember the rule in
   `.flowcode/config.local.json`
-- **refuse** â€” do not run it
-- **refuse always** â€” do not run it, and remember the rule
+- **refuse** Ã¢â‚¬â€ do not run it
+- **refuse always** Ã¢â‚¬â€ do not run it, and remember the rule
 
 A refusal is a decision, not an obstacle. Flow Code tells the agent it was
 refused, and the agent is expected to work within what is allowed.
@@ -495,7 +495,7 @@ Flow Code at to check a configuration:
 ## Sub-agents
 
 A sub-agent is a markdown file with a little frontmatter. It works in its own
-context, with its own tools, and you only see its final answer â€” which is what
+context, with its own tools, and you only see its final answer Ã¢â‚¬â€ which is what
 makes it useful for anything long.
 
 `.flowcode/agents/reviewer.md`:
@@ -544,11 +544,11 @@ as JSON on standard input.
 | `post_tool_use_failure` | A tool failed |
 | `session_end` | The session ended |
 
-- **Exit code 0** â€” carry on. If the hook prints
+- **Exit code 0** Ã¢â‚¬â€ carry on. If the hook prints
   `{"additional_context": "..."}`, that text is passed to the model.
-- **Exit code 2** â€” block the action. The hook's standard error becomes the
+- **Exit code 2** Ã¢â‚¬â€ block the action. The hook's standard error becomes the
   reason, and the model is told.
-- **Anything else** â€” carry on. A hook that fails is not a broken session.
+- **Anything else** Ã¢â‚¬â€ carry on. A hook that fails is not a broken session.
 
 The `matcher` is a regular expression matched against the tool's name.
 
@@ -598,7 +598,7 @@ Every conversation is an append-only JSONL file under
 every line after it is an event.
 
 That means the whole session is yours: readable with any text editor,
-diffable, and yours to delete. Flow Code never rewrites a session log â€” a
+diffable, and yours to delete. Flow Code never rewrites a session log Ã¢â‚¬â€ a
 compaction is recorded as an event, and the view of the conversation is derived
 from the log rather than replacing it.
 
@@ -611,8 +611,8 @@ flowcode --resume ~/.flowcode/sessions/my-project/20261021-204501-a1b2c3.jsonl
 ## Project instructions
 
 Flow Code reads `FLOWCODE.md` from the project root. If there is no
-`FLOWCODE.md`, it falls back to `AGENTS.md` â€” an open convention several agent
-tools use â€” so a project that already has one works without being changed.
+`FLOWCODE.md`, it falls back to `AGENTS.md` Ã¢â‚¬â€ an open convention several agent
+tools use Ã¢â‚¬â€ so a project that already has one works without being changed.
 
 ```markdown
 # How we work
@@ -641,31 +641,31 @@ matches.
 **`flowcode doctor` is the first thing to run.** It is read-only and it will
 tell you which part is not working.
 
-**"Could not reach http://127.0.0.1:11434/v1/models"** â€” the model server is
+**"Could not reach http://127.0.0.1:11434/v1/models"** Ã¢â‚¬â€ the model server is
 not running, or it is on a different port. Start it, and check
 `provider.baseUrl`.
 
-**The model answers but never calls a tool** â€” the model is not good at tool
+**The model answers but never calls a tool** Ã¢â‚¬â€ the model is not good at tool
 use. A coder model such as Qwen2.5-Coder, DeepSeek-Coder or an instruction
 tuned model will do much better. Some servers also need
 `compat.strictToolSchema` turned off, which the presets already do.
 
-**"The arguments for 'read_file' were not valid"** â€” the model sent arguments
+**"The arguments for 'read_file' were not valid"** Ã¢â‚¬â€ the model sent arguments
 that do not match the schema. Flow Code tells the model exactly what was
 wrong, and asks it to try again.
 
-**A command was refused** â€” that is the permission engine working. Use
+**A command was refused** Ã¢â‚¬â€ that is the permission engine working. Use
 `/permissions` to see the rules, or add an allow rule.
 
-**The session is slow** â€” the tool schemas are large, or the context window is
+**The session is slow** Ã¢â‚¬â€ the tool schemas are large, or the context window is
 full. `/tools` shows the schema size, and `/compact` makes room.
 
-**Nothing works on Windows** â€” the shell is PowerShell by default. Set
+**Nothing works on Windows** Ã¢â‚¬â€ the shell is PowerShell by default. Set
 `"shell": "cmd"` or `"shell": "bash"` if you prefer. There is no
 operating-system sandbox for native Windows; run Flow Code inside WSL2 to get
 one.
 
-**Everything is mojibake** â€” your terminal is not using UTF-8. Flow Code's
+**Everything is mojibake** Ã¢â‚¬â€ your terminal is not using UTF-8. Flow Code's
 diagnostic output is plain ASCII for exactly this reason.
 
 ---
@@ -689,13 +689,13 @@ for the conventions, the testing layers, and the clean-room rule.
 **"Flow Code" is simply the name of this personal project.** No ownership,
 copyright or trademark is claimed over the name itself. Anyone is free to use,
 fork, modify, redistribute and build on this project under its MIT licence. If
-you fork it, you are welcome to keep the name â€” and equally welcome to change
+you fork it, you are welcome to keep the name Ã¢â‚¬â€ and equally welcome to change
 it. Nothing here requires you to continue calling it Flow Code.
 
 See [`NOTICE`](./NOTICE) for the full statement and the third-party
 attribution.
 
-Flow Code is licensed under the [MIT Licence](./LICENSE) Â© The Flow Code
+Flow Code is licensed under the [MIT Licence](./LICENSE) Ã‚Â© The Flow Code
 Authors.
 
 Flow Code is an original implementation. It contains no source code, system

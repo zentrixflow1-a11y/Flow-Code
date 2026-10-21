@@ -14,7 +14,7 @@ npm run typecheck
 npm test
 ```
 
-Requirements: **Node.js 20.11 or newer**. There are no native modules, so no
+Requirements: **Node.js 22 or newer**. There are no native modules, so no
 compiler or build toolchain is needed.
 
 ### Everyday commands
@@ -26,7 +26,7 @@ compiler or build toolchain is needed.
 | `npm run test:watch` | Runs Vitest in watch mode |
 | `npm run test:coverage` | Runs the suite with a coverage report |
 | `npm run build` | Compiles `src/` to `dist/` |
-| `npm run check` | Typecheck plus tests â€” run this before opening a PR |
+| `npm run check` | Typecheck plus tests Ã¢â‚¬â€ run this before opening a PR |
 | `npm pack` | Builds the publishable tarball |
 
 ### Testing conventions
@@ -54,8 +54,8 @@ Two rules that matter:
   *passed*.
 
 `scripts/mock-llm.mjs` is a scriptable OpenAI-compatible server used by the
-end-to-end tests. It needs no model and no API key, so the full loop â€” model
-call, tool call, permission prompt, tool result â€” is exercised in CI.
+end-to-end tests. It needs no model and no API key, so the full loop Ã¢â‚¬â€ model
+call, tool call, permission prompt, tool result Ã¢â‚¬â€ is exercised in CI.
 
 ## Code style
 
@@ -70,7 +70,7 @@ call, tool call, permission prompt, tool result â€” is exercised in CI.
   for expected reasons (parse failures, permission refusals, provider errors).
   Reserve `throw` for genuine bugs.
 - **Comment the *why*, not the *what*.** A comment should explain a decision,
-  a constraint, or a surprising behaviour â€” not restate the code.
+  a constraint, or a surprising behaviour Ã¢â‚¬â€ not restate the code.
 - **No dependencies without a reason.** Flow Code ships five runtime
   dependencies on purpose. Adding a sixth needs a strong justification in the
   pull request.
@@ -82,7 +82,7 @@ system prompts, internal strings, or assets from Claude Code, Anthropic, or
 any other proprietary product.
 
 - If you consult a third-party product's documentation to understand its
-  **observable behaviour**, that is fine â€” and you should say so in the pull
+  **observable behaviour**, that is fine Ã¢â‚¬â€ and you should say so in the pull
   request.
 - Do **not** copy code, prompt text, or string tables from any source, whether
   proprietary or merely permissively licensed.

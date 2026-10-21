@@ -245,12 +245,13 @@ export const runHook = async (
     child.on("error", () => finish({ ok: true }));
     child.on("close", (code) => {
       if (code === 2) {
+        // A hook that blocks says why. Its standard error is the reason, and
+        // its standard output is the fallback, because a hook may well print
+        // the reason on either.
+        const reason = stderr.trim() === "" ? stdout.trim() : stderr.trim();
         finish({
           ok: false,
-          reason:
-            stderr.trim() === ""
-              ? "A hook refused this action."
-              : stderr.trim(),
+          reason: reason === "" ? "A hook refused this action." : reason,
         });
         return;
       }
@@ -263,17 +264,27 @@ export const runHook = async (
 };
 
 /**
- * Read the context a hook asked to add.
+ * Read the context a hook asked for.
+ *
+ * The JSON is found inside whatever the hook printed, so a hook may write a
+ * line of its own before it.
  *
  * @param stdout - What the hook printed.
  */
 export const parseHookOutput = (stdout: string): { context?: string } => {
   const trimmed = stdout.trim();
-  if (trimmed === "" || !trimmed.startsWith("{")) {
+  if (trimmed === "") {
     return {};
   }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    return {};
+  }
+
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
+    const parsed = JSON.parse(trimmed.slice(start, end + 1)) as unknown;
     if (typeof parsed !== "object" || parsed === null) {
       return {};
     }
