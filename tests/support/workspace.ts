@@ -43,6 +43,7 @@ export const createWorkspace = async (
     redact: createRedactor(),
     platform: process.platform,
     caseInsensitivePaths: process.platform === "win32",
+    guard: () => undefined,
   };
 
   return {

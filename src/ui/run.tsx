@@ -161,15 +161,7 @@ const suggestFiles = async (
   const result = await executeTool(
     globFilesTool,
     { pattern, max_results: 40 },
-    {
-      cwd: session.cwd,
-      workspaceRoot: session.cwd,
-      additionalDirectories: session.config.permissions.additionalDirectories,
-      env: process.env,
-      redact: (text) => text,
-      platform: process.platform,
-      caseInsensitivePaths: process.platform === "win32",
-    },
+    await session.toolContext(),
   );
 
   if (!result.ok) {

@@ -62,6 +62,7 @@ describe("the web tool", () => {
         redact: (text) => text,
         platform: process.platform,
         caseInsensitivePaths: process.platform === "win32",
+        guard: () => undefined,
       },
     );
     expect(result.ok).toBe(true);
@@ -83,6 +84,7 @@ describe("the web tool", () => {
         redact: (text) => text,
         platform: process.platform,
         caseInsensitivePaths: false,
+        guard: () => undefined,
       },
     );
     expect(result.ok).toBe(false);
@@ -103,6 +105,7 @@ describe("the web tool", () => {
         redact: (text) => text,
         platform: process.platform,
         caseInsensitivePaths: false,
+        guard: () => undefined,
       },
     );
     expect(result.ok).toBe(false);

@@ -25,7 +25,7 @@ export const applyGuard = (
   context: ToolContext,
   category: ToolCategory,
 ): GuardOutcome => {
-  const refusal = context.guard?.(category);
+  const refusal = context.guard(category);
   return refusal === undefined ? { ok: true } : { ok: false, error: refusal };
 };
 

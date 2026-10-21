@@ -53,8 +53,11 @@ export interface ToolContext {
    * decides whether a call may proceed; this guard makes sure the tool
    * itself refuses to act even if something upstream got the decision wrong.
    * The `safe` and `plan` ceilings are enforced here as well as there.
+   *
+   * It is required: a tool that has no guard is a tool that acts whatever
+   * the permission engine decided.
    */
-  readonly guard?: (category: ToolCategory) => FlowError | undefined;
+  readonly guard: (category: ToolCategory) => FlowError | undefined;
   /** Report progress while the tool runs. */
   readonly onProgress?: (message: string) => void;
   /** The registry the tools live in, so a tool can offer a sub-agent a subset. */

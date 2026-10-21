@@ -17,7 +17,8 @@ import { createProvider } from "../providers/factory.js";
 import type { ModelInfo, ModelProvider } from "../providers/types.js";
 import { createDefaultRegistry } from "../tools/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
-import { createRedactor } from "../util/redact.js";
+import { createToolContext } from "../tools/context.js";
+import type { ToolContext, ToolQuestion } from "../tools/types.js";
 import { realpathBestEffort } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 import { readMcpConfig } from "../mcp/config.js";
@@ -37,7 +38,7 @@ import type { AgentOptions, AgentResult, AgentUi, ApprovalDecision } from "./typ
 import { SessionLog } from "../session/log.js";
 import { createSessionId, projectSlug, sessionsRoot } from "../session/store.js";
 import type { FlowCodeConfig } from "../config/types.js";
-import type { PermissionMode } from "../permissions/types.js";
+import type { PermissionMode, ToolCategory } from "../permissions/types.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -289,6 +290,106 @@ export class FlowSession {
   }
 
   /**
+   * Build the context the tools run in.
+   *
+   * Every context in a session comes from here, so a sub-agent has the same
+   * redactor and the same guard as the agent that spawned it.
+   */
+  async toolContext(): Promise<ToolContext> {
+    const secrets = await this.#declaredSecrets();
+
+    const shared = {
+      cwd: this.cwd,
+      workspaceRoot: this.cwd,
+      additionalDirectories: this.config.permissions.additionalDirectories,
+      env: this.#env,
+      secrets,
+      platform: process.platform,
+      caseInsensitivePaths: process.platform === "win32",
+      registry: this.registry,
+      guard: this.#guard,
+      ...(this.#sandbox === undefined ? {} : { sandbox: this.#sandbox }),
+    };
+
+    return createToolContext({
+      ...shared,
+      ...(this.#ui.onAsk === undefined
+        ? {}
+        : {
+            askUser: async (question: ToolQuestion) => {
+              const answers = await this.#ui.onAsk?.(
+                question.question,
+                question.options.map((option) => option.label),
+              );
+              return answers ?? [];
+            },
+          }),
+      spawnAgent: async (name, prompt) => {
+        const definition = this.subAgents.find((entry) => entry.name === name);
+        if (definition === undefined) {
+          return err(
+            flowError(
+              "not_found",
+              `There is no sub-agent called '${name}'.`,
+              {
+                retryable: false,
+                remediation:
+                  this.subAgents.length === 0
+                    ? "This project defines no sub-agents. Put one in .flowcode/agents/."
+                    : `Known sub-agents: ${this.subAgents.map((entry) => entry.name).join(", ")}.`,
+              },
+            ),
+          );
+        }
+
+        return runSubAgent({
+          definition,
+          prompt,
+          provider: this.provider,
+          allowedTools:
+            definition.tools ?? this.registry.list().map((tool) => tool.name),
+          config: this.config,
+          rules: this.rules,
+          permissionContext: {
+            workspaceRoot: this.#resolvedCwd,
+            cwd: this.#resolvedCwd,
+            home: this.#home,
+          },
+          // The sub-agent is given a context built the same way, so it has
+          // the same redactor and the same guard. It cannot spawn another
+          // sub-agent, though: that is how a session turns into a fork bomb.
+          toolContext: createToolContext(shared),
+          ui: this.#ui,
+        });
+      },
+    });
+  }
+
+  /**
+   * The second enforcement layer.
+   *
+   * The tool refuses to act even if the decision upstream were wrong.
+   */
+  #guard = (category: ToolCategory): FlowError | undefined => {
+    const mode = this.config.permissions.mode;
+    if (mode === "safe" && category !== "read" && category !== "control") {
+      return flowError(
+        "permission_denied",
+        `Safe mode does not allow ${category} tools.`,
+        { retryable: false },
+      );
+    }
+    if (mode === "plan" && category !== "read" && category !== "control") {
+      return flowError(
+        "permission_denied",
+        `Plan mode does not allow ${category} tools.`,
+        { retryable: false },
+      );
+    }
+    return undefined;
+  };
+
+  /**
    * Run the agent.
    *
    * @param prompt - The user's message, when the run starts with one.
@@ -305,92 +406,7 @@ export class FlowSession {
         cwd: this.#resolvedCwd,
         home: this.#home,
       },
-      toolContext: {
-        cwd: this.cwd,
-        workspaceRoot: this.cwd,
-        additionalDirectories: this.config.permissions.additionalDirectories,
-        env: this.#env,
-        redact: createRedactor({
-          secrets: await this.#declaredSecrets(),
-        }),
-        platform: process.platform,
-        caseInsensitivePaths: process.platform === "win32",
-        registry: this.registry,
-        ...(this.#sandbox === undefined ? {} : { sandbox: this.#sandbox }),
-        spawnAgent: async (name, prompt) => {
-          const definition = this.subAgents.find((entry) => entry.name === name);
-          if (definition === undefined) {
-            return err(
-              flowError(
-                "not_found",
-                `There is no sub-agent called '${name}'.`,
-                {
-                  retryable: false,
-                  remediation:
-                    this.subAgents.length === 0
-                      ? "This project defines no sub-agents. Put one in .flowcode/agents/."
-                      : `Known sub-agents: ${this.subAgents.map((entry) => entry.name).join(", ")}.`,
-                },
-              ),
-            );
-          }
-
-          return runSubAgent({
-            definition,
-            prompt,
-            provider: this.provider,
-            allowedTools: definition.tools ?? this.registry.list().map((tool) => tool.name),
-            config: this.config,
-            rules: this.rules,
-            permissionContext: {
-              workspaceRoot: this.#resolvedCwd,
-              cwd: this.#resolvedCwd,
-              home: this.#home,
-            },
-            toolContext: {
-              cwd: this.cwd,
-              workspaceRoot: this.cwd,
-              additionalDirectories: this.config.permissions.additionalDirectories,
-              env: this.#env,
-              redact: (text) => text,
-              platform: process.platform,
-              caseInsensitivePaths: process.platform === "win32",
-              registry: this.registry,
-              spawnAgent: undefined,
-            },
-            ui: this.#ui,
-          });
-        },
-        askUser: this.#ui.onAsk
-          ? async (question) => {
-              const answers = await this.#ui.onAsk?.(
-                question.question,
-                question.options.map((option) => option.label),
-              );
-              return answers ?? [];
-            }
-          : undefined,
-        guard: (category) => {
-          // The second enforcement layer: the tool refuses to act even if the
-          // decision upstream were wrong.
-          const mode = this.config.permissions.mode;
-          if (mode === "safe" && category !== "read" && category !== "control") {
-            return flowError(
-              "permission_denied",
-              `Safe mode does not allow ${category} tools.`,
-              { retryable: false },
-            );
-          }
-          if (mode === "plan" && category !== "read" && category !== "control") {
-            return flowError(
-              "permission_denied",
-              `Plan mode does not allow ${category} tools.`,
-              { retryable: false },
-            );
-          }
-          return undefined;
-        },
-      },
+      toolContext: await this.toolContext(),
       ui: this.#ui,
       ...(this.hooks.length === 0 ? {} : { hooks: this.hooks }),
       toolSchemaBudget: this.config.tools.maxToolSchemaBytes,

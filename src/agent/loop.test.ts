@@ -117,6 +117,7 @@ describe("the agent loop", () => {
       redact: (text) => text,
       platform: "linux",
       caseInsensitivePaths: false,
+      guard: () => undefined,
     },
     ui,
     ...overrides,

@@ -14,6 +14,7 @@ const baseContext = (overrides: Partial<ToolContext> = {}): ToolContext => ({
   redact: (text) => text,
   platform: process.platform,
   caseInsensitivePaths: process.platform === "win32",
+  guard: () => undefined,
   ...overrides,
 });
 

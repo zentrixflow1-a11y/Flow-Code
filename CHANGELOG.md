@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **One builder for the tool context** (`src/tools/context.ts`): every context
+  in a session comes from it, so a sub-agent cannot end up with a weaker one
+  than the agent that spawned it — the same redactor, the same guard, the
+  same directories, the same secrets.
+
 - **`isSensitivePath`** (`src/util/paths.ts`): the single answer to "may this
   file be read?". It is a question about the path, not about the tool that
   asks it, so a credential file is a credential file however it is reached.
@@ -25,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ask, so it ignores those files and says so on standard error.
 
 ### Fixed
+
+- **A sub-agent did not redact what it found.** The main agent removed
+  secrets from what a tool returned; a sub-agent was given a context that
+  changed nothing, so a key it read came back to the parent in the clear.
+  Both now share one context builder, so both redact the same way.
 
 - **A search could return a credential file.** `read_file` refused to read
   `.env`, but `grep_files` did not know that, so a search for a common word
@@ -57,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is never sent to an endpoint the user's own configuration did not choose.
 
 ### Changed
+
+- **The guard is part of the tool context, not an optional extra.** A tool
+  that has no guard is a tool that acts whatever the permission engine
+  decided, so the field is required and a missing one fails to compile.
 
 - **A rule added by a slash command is saved in your own configuration.** It
   used to be written to the project's `config.local.json`, which a project may
