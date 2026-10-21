@@ -197,6 +197,18 @@ describe("a command that reads a secret", () => {
     expect(isReadOnlyCommand("git show HEAD:.env", "linux")).toBe(false);
   });
 
+  it("is not read-only when a wildcard could reach a secret", () => {
+    expect(isReadOnlyCommand("cat .e*", "linux")).toBe(false);
+    expect(isReadOnlyCommand("cat .env*", "linux")).toBe(false);
+    expect(isReadOnlyCommand("cat $HOME/.e*", "linux")).toBe(false);
+    expect(isReadOnlyCommand("cat /etc/shadow", "linux")).toBe(false);
+  });
+
+  it("does not mind a wildcard that cannot reach one", () => {
+    expect(isReadOnlyCommand("cat *.ts", "linux")).toBe(true);
+    expect(isReadOnlyCommand("cat src/*.ts", "linux")).toBe(true);
+  });
+
   it("does not mind an ordinary file", () => {
     expect(isReadOnlyCommand("cat package.json", "linux")).toBe(true);
     expect(isReadOnlyCommand("cat src/environment.ts", "linux")).toBe(true);

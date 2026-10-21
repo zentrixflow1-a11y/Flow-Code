@@ -7,7 +7,7 @@
  * is the same everywhere.
  */
 import { flowError, type FlowError } from "../errors.js";
-import { isSensitivePath } from "../util/paths.js";
+import { namesSecret } from "../util/paths.js";
 import { commandSegments, commandWords } from "../util/text.js";
 
 /**
@@ -44,7 +44,7 @@ export const sensitiveWords = (command: string): string[] => {
   for (const segment of commandSegments(command)) {
     for (const word of commandWords(segment)) {
       const name = word.split(/[<>|]/)[0] ?? "";
-      if (name !== "" && isSensitivePath(name)) {
+      if (name !== "" && namesSecret(name)) {
         found.push(word);
       }
     }

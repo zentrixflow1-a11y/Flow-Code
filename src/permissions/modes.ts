@@ -7,7 +7,7 @@
  * tighten but never loosen.
  */
 import type { PermissionMode, ToolCategory } from "./types.js";
-import { isSensitivePath } from "../util/paths.js";
+import { namesSecret } from "../util/paths.js";
 import { commandSegments, commandWords } from "../util/text.js";
 
 /** How a mode treats a tool category when no rule applies. */
@@ -343,17 +343,18 @@ const writesAFile = (argument: string): boolean =>
  * Whether an argument points at a file that holds a secret.
  *
  * The check is on the path, so `cat .env`, `grep -r key .env` and
- * `git show HEAD:.env` are all refused.
+ * `git show HEAD:.env` are all refused — and so is `cat .e*`, which reads
+ * the same file.
  */
 const touchesASecret = (argument: string): boolean => {
-  if (isSensitivePath(argument)) {
+  if (namesSecret(argument)) {
     return true;
   }
 
   // A revision may be written in front of the path: `HEAD:secrets.json`.
   const colon = argument.indexOf(":");
   if (colon !== -1) {
-    return isSensitivePath(argument.slice(colon + 1));
+    return namesSecret(argument.slice(colon + 1));
   }
 
   return false;

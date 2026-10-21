@@ -8,6 +8,7 @@
 import { chmod, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
+import { isGlob, matchGlob } from "./glob.js";
 import { err, ok, type Result } from "./result.js";
 
 /**
@@ -243,7 +244,90 @@ export const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
   /^(secrets?|credentials?|client[-_]?secrets?|service[-_]?accounts?|auth|application[-_]default[-_]credentials)\.(json|ya?ml|toml|ini|env|xml)$/i,
   /\.tfvars$/i,
   /\.secret$/i,
+  /^shadow$/i,
+  /^environ$/i,
 ];
+
+/**
+ * The names that stand for a credential file.
+ *
+ * They are what a wildcard is compared against: `cat .e*` reads `.env`, and
+ * a pattern that could match one of these names one of them.
+ */
+export const SECRET_NAMES: readonly string[] = [
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.development",
+  "id_rsa",
+  "id_dsa",
+  "id_ecdsa",
+  "id_ed25519",
+  "server.pem",
+  "server.key",
+  "private.pem",
+  "private.key",
+  "store.p12",
+  "store.pfx",
+  "keystore.jks",
+  ".npmrc",
+  ".netrc",
+  ".pypirc",
+  ".git-credentials",
+  ".htpasswd",
+  ".pgpass",
+  ".s3cfg",
+  "credentials.json",
+  "secrets.json",
+  "secrets.yaml",
+  "client_secret.json",
+  "service_account.json",
+  "application_default_credentials.json",
+  "terraform.tfvars",
+  "shadow",
+  "environ",
+];
+
+/**
+ * The punctuation a shell puts around a name rather than inside it.
+ */
+const SHELL_EDGE = /^[(){}\[\]'"`|<>]+|[(){}\[\]'"`|<>;,]+$/g;
+
+/**
+ * Whether a word in a command names a file that holds a secret.
+ *
+ * The word is cleaned of the punctuation a shell puts around it — quotes,
+ * braces, a closing parenthesis — and a pattern that could match a
+ * credential file counts as naming one, because `cat .e*` reads `.env`.
+ *
+ * @param word - The word to test.
+ */
+export const namesSecret = (word: string): boolean => {
+  const equals = word.indexOf("=");
+  const values = equals === -1 ? [word] : [word, word.slice(equals + 1)];
+
+  for (const value of values) {
+    const cleaned = value.replace(SHELL_EDGE, "");
+    if (cleaned === "") {
+      continue;
+    }
+    if (isSensitivePath(cleaned)) {
+      return true;
+    }
+
+    // A pattern is compared by its last segment, because that is the part
+    // that names the file: `$HOME/.e*` reads `.env`.
+    const base = cleaned.slice(cleaned.lastIndexOf("/") + 1);
+    if (
+      isGlob(base) &&
+      SECRET_NAMES.some((name) => matchGlob(base, name))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 /**
  * Whether a path holds a secret.

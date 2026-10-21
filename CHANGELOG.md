@@ -28,19 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refused.
 
 - **Workspace trust** (`src/security/trust.ts`): a project's own files are
-  code — a hook is a command, an MCP server is a program, a configuration file
-  says where an API key is sent — so none of them is read until the user has
+  code - a hook is a command, an MCP server is a program, a configuration file
+  says where an API key is sent - so none of them is read until the user has
   said that they trust the directory. The trusted directories are remembered
   in `~/.flowcode/trusted.json`, as resolved paths. The question is asked only
-  when the directory actually has a `.flowcode` folder; headless mode cannot
-  ask, so it ignores those files and says so on standard error.
+  when the directory actually has files of its own; headless mode cannot ask,
+  so it ignores them and says so on standard error.
 
 ### Fixed
 
 - **A command could hide a credential behind a separator.** The refusal for a
   command that named a credential file looked at the words of the command, so
   `cat .env;id` and `cat .env>/tmp/out` slipped past it and printed the
-  secret. The command is now split the way a shell splits it.
+  secret. The command is now split the way a shell splits it, the
+  punctuation a shell puts around a name is taken off it, and a wildcard that
+  could reach a credential file counts as naming one — `cat .e*` reads
+  `.env`.
 - **A read-only command could run a program.** `fd -x rm` deletes files,
   `rg --pre` runs a command, `tree -o` writes a file, and `find -fprint0`
   writes one too. Those options are refused now, and a program is no longer
@@ -77,7 +80,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"shell": "cmd"` or `"shell": "bash"`, and the configuration was read and
   then ignored: every command ran in the platform's default shell. The
   setting is honoured now.
-
 - **A session log kept everything, and everybody could read it.** The log
   was created with mode `0644` inside a directory of mode `0755`, and it
   held the conversation verbatim — so a key that reached the conversation
@@ -89,7 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets from what a tool returned; a sub-agent was given a context that
   changed nothing, so a key it read came back to the parent in the clear.
   Both now share one context builder, so both redact the same way.
-
 - **A search could return a credential file.** `read_file` refused to read
   `.env`, but `grep_files` did not know that, so a search for a common word
   returned the contents of the file in the middle of its results. The rule is
