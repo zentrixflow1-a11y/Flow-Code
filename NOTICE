@@ -1,0 +1,60 @@
+# NOTICE
+
+## The name "Flow Code"
+
+"Flow Code" is simply the name of the author's personal project. **No
+ownership, copyright, or trademark is claimed over the name "Flow Code"
+itself.** The name is used descriptively to refer to this software.
+
+Anyone is free to use, copy, fork, modify, redistribute, and build on this
+project, under the terms of the MIT License that ships with it. If you fork it,
+you are welcome to keep the name, but you are equally welcome to rename it to
+whatever suits your project — nothing in this repository requires you to
+continue using it.
+
+The MIT License covers the source code, documentation, and artwork in this
+repository. It does not, and is not intended to, grant any rights to the
+"Flow Code" name as such.
+
+## Third-party software
+
+Flow Code depends on third-party packages distributed under their own licenses.
+They are not bundled into this repository; they are installed from the npm
+registry at install time. Their license texts are not reproduced here.
+
+| Package | License | Why it is used |
+| --- | --- | --- |
+| `ink` | MIT | Terminal UI rendering |
+| `react` | MIT | Component model used by Ink |
+| `zod` | MIT | Tool input validation and JSON Schema generation |
+| `diff` | BSD-3-Clause | Unified diff rendering for file edits |
+| `@modelcontextprotocol/client` | MIT | Model Context Protocol client |
+
+Run `npm ls --all` for the full transitive dependency tree. Each package's own
+`LICENSE` file in `node_modules/` is the authoritative license text.
+
+## Clean-room statement
+
+This project is an **original implementation**. It was written from scratch by
+the author.
+
+- It contains **no source code, system prompts, internal strings, or assets**
+  from Claude Code, Anthropic, or any other proprietary product.
+- Its system prompt, tool descriptions, tool schemas, permission-rule syntax,
+  slash commands, and hook protocol were written independently for this
+  project.
+- Public product documentation was consulted to understand *observable
+  behavior* — the same way any developer reads a specification. Documented
+  behavior is not copyrightable; the implementation here is original.
+- Two MIT-licensed open-source projects were studied for engineering patterns
+  (tool contract design, session log structure, local-model provider
+  configuration). No code, prompt text, or string table was copied from them.
+
+See [`PLAN.md`](./PLAN.md) §2 for the full clean-room record.
+
+## Third-party tool and service trademarks
+
+Flow Code can be configured to talk to third-party model providers and tools
+(Anthropic, OpenAI, Ollama, LM Studio, DeepSeek, OpenRouter, and others).
+Those names belong to their respective owners. Flow Code is an independent
+project and is not affiliated with, endorsed by, or sponsored by any of them.

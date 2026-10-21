@@ -1,0 +1,72 @@
+{
+  "name": "flow-code-cli",
+  "version": "0.1.0",
+  "description": "Local-first terminal AI coding harness. Bring your own model â€” local or hosted.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "bin": {
+    "flowcode": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "coding-agent",
+    "cli",
+    "llm",
+    "local",
+    "ollama",
+    "mcp",
+    "model-context-protocol",
+    "terminal"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zentrixflow1-a11y/Flow-Code.git"
+  },
+  "homepage": "https://github.com/zentrixflow1-a11y/Flow-Code#readme",
+  "bugs": {
+    "url": "https://github.com/zentrixflow1-a11y/Flow-Code/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run typecheck && npm run test",
+    "prepack": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
+    "diff": "^9.0.0",
+    "ink": "^8.0.0",
+    "react": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

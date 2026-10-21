@@ -1,0 +1,287 @@
+/**
+ * Hooks.
+ *
+ * A hook is a command that Flow Code runs at a point in the session. It
+ * receives the event on standard input and answers on standard output. It is
+ * a small, deliberate design: six events and two outcomes, which is all that
+ * earns its keep.
+ */
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { flowError, type FlowError } from "../errors.js";
+import { err, ok, type Result } from "../util/result.js";
+
+/** The points in a session a hook can run at. */
+export type HookEvent =
+  /** The session started. */
+  | "session_start"
+  /** The user sent a message. */
+  | "user_prompt_submit"
+  /** A tool is about to run. */
+  | "pre_tool_use"
+  /** A tool finished successfully. */
+  | "post_tool_use"
+  /** A tool failed. */
+  | "post_tool_use_failure"
+  /** The session ended. */
+  | "session_end";
+
+/** The events a hook may be registered for. */
+export const HOOK_EVENTS: readonly HookEvent[] = [
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "post_tool_use_failure",
+  "session_end",
+];
+
+/** One configured hook. */
+export interface HookDefinition {
+  /** The event it runs at. */
+  readonly event: HookEvent;
+  /**
+   * Which calls it applies to.
+   *
+   * For a tool event, the tool's name, matched as a regular expression.
+   */
+  readonly matcher?: string;
+  /** The command to run. */
+  readonly command: string;
+  /** How long it may take, in milliseconds. */
+  readonly timeoutMs?: number;
+}
+
+/** The file the hooks are configured in. */
+export const HOOKS_FILE = "hooks.json";
+
+/** Where the global hooks are configured. */
+export const globalHooksPath = (home: string): string =>
+  join(home, ".flowcode", HOOKS_FILE);
+
+/** Where the project's hooks are configured. */
+export const projectHooksPath = (cwd: string): string =>
+  join(cwd, ".flowcode", HOOKS_FILE);
+
+/**
+ * Read the configured hooks.
+ *
+ * @param options - Where to look.
+ */
+export const readHooks = async (
+  options: {
+    readonly cwd: string;
+    readonly home?: string;
+  },
+): Promise<Result<readonly HookDefinition[], FlowError>> => {
+  const home = options.home ?? homedir();
+  const paths = [globalHooksPath(home), projectHooksPath(options.cwd)];
+
+  const hooks: HookDefinition[] = [];
+
+  for (const path of paths) {
+    const read = await readHooksFile(path);
+    if (!read.ok) {
+      return read;
+    }
+    hooks.push(...read.value);
+  }
+
+  return ok(hooks);
+};
+
+/** Read one hooks file. */
+const readHooksFile = async (
+  path: string,
+): Promise<Result<readonly HookDefinition[], FlowError>> => {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return ok([]);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch (error) {
+    return err(
+      flowError("invalid_request", `The hook configuration '${path}' is not valid JSON.`, {
+        retryable: false,
+        cause: error,
+      }),
+    );
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return err(
+      flowError("invalid_request", `The hook configuration '${path}' is not an object.`, {
+        retryable: false,
+      }),
+    );
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const entries = record["hooks"];
+  if (typeof entries !== "object" || entries === null) {
+    return ok([]);
+  }
+
+  const hooks: HookDefinition[] = [];
+
+  for (const [event, value] of Object.entries(entries as Record<string, unknown>)) {
+    if (!(HOOK_EVENTS as readonly string[]).includes(event)) {
+      continue;
+    }
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    for (const entry of value) {
+      if (typeof entry !== "object" || entry === null) {
+        continue;
+      }
+      const hook = entry as Record<string, unknown>;
+      if (typeof hook["command"] !== "string" || hook["command"] === "") {
+        continue;
+      }
+      hooks.push({
+        event: event as HookEvent,
+        ...(typeof hook["matcher"] === "string" ? { matcher: hook["matcher"] } : {}),
+        command: hook["command"],
+        ...(typeof hook["timeoutMs"] === "number" ? { timeoutMs: hook["timeoutMs"] } : {}),
+      });
+    }
+  }
+
+  return ok(hooks);
+};
+
+/**
+ * Whether a hook applies to a tool call.
+ *
+ * @param hook - The hook.
+ * @param toolName - The tool being called.
+ */
+export const hookApplies = (hook: HookDefinition, toolName: string): boolean => {
+  if (hook.matcher === undefined || hook.matcher === "" || hook.matcher === "*") {
+    return true;
+  }
+  try {
+    return new RegExp(hook.matcher).test(toolName);
+  } catch {
+    return false;
+  }
+};
+
+/** What a hook said. */
+export type HookOutcome =
+  /** The hook did not object. */
+  | { readonly ok: true; readonly context?: string }
+  /** The hook blocked the action. */
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * Run one hook.
+ *
+ * The hook receives the event as JSON on standard input. Exit code zero lets
+ * the action proceed; exit code two blocks it, and the standard error
+ * becomes the reason.
+ *
+ * @param hook - The hook to run.
+ * @param payload - The event to send.
+ * @param options - Where to run it.
+ */
+export const runHook = async (
+  hook: HookDefinition,
+  payload: unknown,
+  options: {
+    readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv;
+    readonly timeoutMs?: number;
+  },
+): Promise<HookOutcome> => {
+  const timeout = hook.timeoutMs ?? options.timeoutMs ?? 5000;
+
+  return new Promise<HookOutcome>((resolve) => {
+    const child = spawn(hook.command, {
+      cwd: options.cwd,
+      env: options.env,
+      shell: true,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+
+    const finish = (outcome: HookOutcome): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+
+    const timer = setTimeout(() => {
+      child.kill();
+      // A hook that runs out of time does not block the action, unless it
+      // was the one that was meant to stop it.
+      finish({ ok: true });
+    }, timeout);
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (text: string) => {
+      stdout += text;
+    });
+    child.stderr.on("data", (text: string) => {
+      stderr += text;
+    });
+
+    child.on("error", () => finish({ ok: true }));
+    child.on("close", (code) => {
+      if (code === 2) {
+        finish({
+          ok: false,
+          reason:
+            stderr.trim() === ""
+              ? "A hook refused this action."
+              : stderr.trim(),
+        });
+        return;
+      }
+      finish({ ok: true, ...parseHookOutput(stdout) });
+    });
+
+    child.stdin.on("error", () => undefined);
+    child.stdin.end(JSON.stringify(payload));
+  });
+};
+
+/**
+ * Read the context a hook asked to add.
+ *
+ * @param stdout - What the hook printed.
+ */
+export const parseHookOutput = (stdout: string): { context?: string } => {
+  const trimmed = stdout.trim();
+  if (trimmed === "" || !trimmed.startsWith("{")) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed !== "object" || parsed === null) {
+      return {};
+    }
+    const record = parsed as Record<string, unknown>;
+    const context =
+      record["additional_context"] ?? record["additionalContext"];
+    return typeof context === "string" && context !== "" ? { context } : {};
+  } catch {
+    return {};
+  }
+};

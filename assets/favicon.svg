@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Flow Code">
+  <title>Flow Code</title>
+  <desc>Simplified Flow Code mark for favicon use.</desc>
+  <defs>
+    <linearGradient id="fcFavicon" x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0.55" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#C084FC"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#fcFavicon)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 3.5 L16 11 L8 18.5"/>
+    <path d="M4 26 C9 21 15 29 21 24 C25 20.5 28 22.5 30 21.5"/>
+  </g>
+</svg>

@@ -1,0 +1,29 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secrets
+.env
+.env.*
+credentials.json
+
+# The personal, uncommitted parts of a project's configuration. The rest of
+# .flowcode/ — the shared config, the MCP servers, the agents and the rules
+# — is meant to be committed.
+.flowcode/config.local.json
+.flowcode/hooks.local.json
+
+# Editors and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Not part of this project
+nagpur-cafes.csv

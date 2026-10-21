@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Flow Code">
+  <title>Flow Code</title>
+  <desc>A terminal prompt chevron flowing above a stream wave.</desc>
+  <defs>
+    <linearGradient id="fcMark" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0.55" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#C084FC"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#fcMark)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 9 L34 24 L18 39"/>
+    <path d="M6 53 C14 45 22 59 31 52 C40 45 48 58 60 47"/>
+  </g>
+</svg>

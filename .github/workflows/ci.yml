@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The end-to-end tests in here are the quick start: the real CLI, the
+      # real provider adapter and the real tools, against a mock model server.
+      - name: Unit, integration and end-to-end tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify the packaged CLI installs and runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/install"
+          cd "$RUNNER_TEMP/install"
+          npm init -y >/dev/null
+          npm install "$RUNNER_TEMP"/flow-code-cli-*.tgz
+          npx flowcode --version
+          npx flowcode --help
+          npx flowcode doctor || true
+
+      - name: Verify the quick start end to end
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${{ github.workspace }}"
+
+          # Start the mock model server and the mock MCP server.
+          node scripts/mock-llm.mjs >"$RUNNER_TEMP/mock.log" 2>&1 &
+          MOCK_PID=$!
+          trap 'kill $MOCK_PID 2>/dev/null || true' EXIT
+          sleep 2
+
+          PORT=$(sed -n 's/.*LISTENING 127.0.0.1:\([0-9]*\).*/\1/p' "$RUNNER_TEMP/mock.log" | head -1)
+          if [ -z "$PORT" ]; then
+            echo "The mock server did not report a port:"
+            cat "$RUNNER_TEMP/mock.log"
+            exit 1
+          fi
+
+          # Carry out a task with the packaged CLI, exactly as the README says.
+          OUT=$(cd "$RUNNER_TEMP/install" && npx flowcode -p "read the readme" \
+            --provider custom --base-url "http://127.0.0.1:${PORT}/v1" \
+            --model mock-model 2>/dev/null)
+          echo "$OUT"
+
+          if ! echo "$OUT" | grep -q "Mock answer"; then
+            echo "The quick start did not produce the expected answer."
+            exit 1
+          fi

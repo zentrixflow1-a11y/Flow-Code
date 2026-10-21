@@ -1,0 +1,15 @@
+# Keep the line endings in the repository LF, on every platform, so that a
+# checkout on Windows, macOS or Linux produces the same files.
+* text=auto eol=lf
+
+# Binary files must never be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.gz binary

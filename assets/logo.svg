@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 258 72" width="258" height="72" role="img" aria-label="Flow Code">
+  <title>Flow Code</title>
+  <desc>The Flow Code mark: a terminal prompt chevron flowing above a stream wave, beside the wordmark.</desc>
+  <defs>
+    <linearGradient id="fcMark" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0.55" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#C084FC"/>
+    </linearGradient>
+    <linearGradient id="fcWord" x1="86" y1="0" x2="250" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0891B2"/>
+      <stop offset="0.5" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(8 4)" fill="none" stroke="url(#fcMark)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 9 L34 24 L18 39"/>
+    <path d="M6 53 C14 45 22 59 31 52 C40 45 48 58 60 47"/>
+  </g>
+
+  <text x="86" y="46" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="34" letter-spacing="-0.6">
+    <tspan font-weight="700" fill="url(#fcWord)">Flow</tspan><tspan font-weight="500" dx="7" fill="#475569">Code</tspan>
+  </text>
+</svg>
