@@ -90,8 +90,14 @@ jobs:
           cat "$RUNNER_TEMP/quickstart.err"
           echo "--- model server log ---"
           cat "$RUNNER_TEMP/mock.log"
+          echo "--- session log ---"
+          cat "$HOME"/.flowcode/sessions/*/*/*.jsonl 2>/dev/null || echo "(no session log)"
 
           if ! echo "$OUT" | grep -q "Mock answer"; then
             echo "The quick start did not produce the expected answer."
+            echo "--- as json ---"
+            (cd "$RUNNER_TEMP/install" && ./node_modules/.bin/flowcode -p "read the readme" \
+              --provider custom --base-url "http://127.0.0.1:${PORT}/v1" \
+              --model mock-model --output-format json 2>&1) || true
             exit 1
           fi
