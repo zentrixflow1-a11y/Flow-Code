@@ -7,6 +7,11 @@ const packageJson = JSON.parse(
   readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
 ) as { name: string; version: string; bin: Record<string, string> };
 
+const changelog = readFileSync(
+  fileURLToPath(new URL("../CHANGELOG.md", import.meta.url)),
+  "utf8",
+);
+
 describe("version", () => {
   it("matches the version in package.json", () => {
     expect(VERSION).toBe(packageJson.version);
@@ -18,5 +23,14 @@ describe("version", () => {
 
   it("installs an executable named flowcode", () => {
     expect(packageJson.bin[BINARY_NAME]).toBeDefined();
+  });
+
+  it("is the version the changelog's latest heading names", () => {
+    const headings = [...changelog.matchAll(/^## \[(\d+\.\d+\.\d+)\]/gm)].map(
+      (match) => match[1],
+    );
+
+    expect(headings.length).toBeGreaterThan(0);
+    expect(headings[0]).toBe(packageJson.version);
   });
 });

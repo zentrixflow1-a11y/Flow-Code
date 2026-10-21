@@ -3,6 +3,8 @@
  */
 import { PRESETS } from "../providers/presets.js";
 import { PERMISSION_MODES } from "../permissions/types.js";
+import { scaffoldProjectInstructions } from "../context/init.js";
+import { PRIMARY_INSTRUCTION_FILE } from "../context/instructions.js";
 import { formatBytes } from "../util/text.js";
 import type { CommandDefinition, CommandOutcome, CommandServices } from "./types.js";
 
@@ -207,6 +209,45 @@ export const mcpCommand: CommandDefinition = {
   },
 };
 
+/** Write a starting project instructions file. */
+export const initCommand: CommandDefinition = {
+  name: "init",
+  summary: "Write a starting FLOWCODE.md from the repository.",
+  usage: "/init",
+  async run(context): Promise<CommandOutcome> {
+    const scaffold = await scaffoldProjectInstructions(context.services.cwd);
+    if (!scaffold.ok) {
+      return { output: scaffold.error.message };
+    }
+
+    const writer = context.services.writeWorkspaceFile;
+    if (writer === undefined) {
+      return { output: "This session cannot write files." };
+    }
+
+    const written = await writer(
+      PRIMARY_INSTRUCTION_FILE,
+      scaffold.value.content,
+    );
+    if (!written.ok) {
+      return { output: written.error.message };
+    }
+
+    const facts =
+      scaffold.value.facts.length === 0
+        ? "It could not tell anything about the project, so the file is a set of questions."
+        : `It worked out that ${scaffold.value.facts.join(", ")}.`;
+
+    return {
+      output: [
+        `Wrote ${PRIMARY_INSTRUCTION_FILE}.`,
+        facts,
+        "Read it, change what is not true, and delete the parts you do not need.",
+      ].join("\n"),
+    };
+  },
+};
+
 /** Leave the session. */
 export const exitCommand: CommandDefinition = {
   name: "exit",
@@ -230,6 +271,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   toolsCommand,
   planCommand,
   mcpCommand,
+  initCommand,
   exitCommand,
 ];
 

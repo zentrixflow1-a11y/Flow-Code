@@ -52,6 +52,16 @@ export interface CommandServices {
   }[];
   /** The sub-agents the project defines. */
   readonly subAgents?: readonly { readonly name: string; readonly description: string }[];
+  /**
+   * Write a file in the workspace.
+   *
+   * Only the commands that create a file use it, and only inside the
+   * workspace.
+   */
+  readonly writeWorkspaceFile?: (
+    relativePath: string,
+    content: string,
+  ) => Promise<Result<string, FlowError>>;
 }
 
 /** What a command produced. */

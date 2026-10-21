@@ -1,6 +1,6 @@
 {
   "name": "flow-code-cli",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "Local-first terminal AI coding harness. Bring your own model — local or hosted.",
   "license": "MIT",
   "type": "module",

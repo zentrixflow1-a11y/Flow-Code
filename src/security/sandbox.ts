@@ -94,11 +94,16 @@ const hasCommand = async (command: string): Promise<boolean> => {
 /**
  * The Seatbelt profile that allows writes only inside the given roots.
  *
+ * The paths are escaped, because the profile is a string of rules: a path
+ * with a quote or a backslash in it would otherwise end the rule early — and
+ * a path a user chose should never be able to write rules of its own.
+ *
  * @param roots - The directories that may be written to.
  */
 export const seatbeltProfile = (roots: readonly string[]): string => {
   const writes = roots
-    .map((root) => `  (allow file-write* (subpath "${root}"))`)
+    .filter((root) => !hasControlCharacter(root))
+    .map((root) => `  (allow file-write* (subpath "${escapeSeatbeltPath(root)}"))`)
     .join("\n");
 
   return [
@@ -119,7 +124,29 @@ export const seatbeltProfile = (roots: readonly string[]): string => {
 };
 
 /**
+ * Escape a path for the Seatbelt profile language.
+ *
+ * @param path - The path to escape.
+ */
+export const escapeSeatbeltPath = (path: string): string =>
+  path.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+/**
+ * Whether a path holds a character the profile cannot carry.
+ *
+ * @param path - The path to check.
+ */
+const hasControlCharacter = (path: string): boolean =>
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u001F\u007F]/.test(path);
+
+/**
  * The bubblewrap arguments that allow writes only inside the given roots.
+ *
+ * The network is left alone on purpose: the sandbox confines *writes*, and
+ * Seatbelt allows the network too. A command that needs the network — an
+ * install, a fetch — still has it, and the two mechanisms behave the same
+ * way on both platforms.
  *
  * @param roots - The directories that may be written to.
  */
@@ -134,7 +161,11 @@ export const bubblewrapArgs = (roots: readonly string[]): readonly string[] => {
     "/proc",
     "--tmpfs",
     "/tmp",
-    "--unshare-all",
+    "--unshare-user",
+    "--unshare-ipc",
+    "--unshare-pid",
+    "--unshare-uts",
+    "--unshare-cgroup",
     "--die-with-parent",
   ];
 

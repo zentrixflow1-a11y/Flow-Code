@@ -46,11 +46,14 @@ export const executeTool = async <A>(
   try {
     result = await definition.execute(rawArgs as A, context);
   } catch (error) {
+    // The message of a thrown error can hold anything the tool was working
+    // with, so it is redacted like everything else.
+    const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
       error: flowError(
         "tool_failed",
-        `The tool '${definition.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
+        `The tool '${definition.name}' failed: ${context.redact(message)}`,
         { retryable: false, cause: error },
       ),
     };

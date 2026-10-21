@@ -94,7 +94,30 @@ describe("the sandbox", () => {
     expect(args).toContain("--ro-bind");
     expect(args).toContain("/");
     expect(args).toContain("/home/user/project");
-    expect(args).toContain("--unshare-all");
+    expect(args).toContain("--unshare-pid");
+  });
+
+  it("leaves the network alone in both sandboxes", () => {
+    // The sandbox confines writes. It does not cut the network, so the two
+    // mechanisms behave the same way on both platforms.
+    const args = bubblewrapArgs(["/work"]);
+    expect(args).not.toContain("--unshare-net");
+    expect(args).not.toContain("--unshare-all");
+
+    const profile = seatbeltProfile(["/work"]);
+    expect(profile).toContain("(allow network-outbound)");
+  });
+
+  it("escapes a path that would otherwise end the rule", () => {
+    const profile = seatbeltProfile(['/work/with"quote']);
+    expect(profile).toContain('(allow file-write* (subpath "/work/with\\"quote"))');
+    // One rule, not two: the quote did not end the rule early.
+    expect(profile.split("(allow file-write*").length - 1).toBe(1);
+  });
+
+  it("leaves out a path the profile cannot carry", () => {
+    const profile = seatbeltProfile(["/work\n/evil"]);
+    expect(profile).not.toContain("/evil");
   });
 
   it("wraps a command for the sandbox", () => {

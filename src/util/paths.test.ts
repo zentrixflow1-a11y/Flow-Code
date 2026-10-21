@@ -53,6 +53,12 @@ describe("isProtectedPath", () => {
     expect(isProtectedPath("/project/id_rsa")).toBe(true);
   });
 
+  it("ignores the case of a protected directory", () => {
+    expect(isProtectedPath("/project/.GIT/config")).toBe(true);
+    expect(isProtectedPath("/project/.FlowCode/config.json")).toBe(true);
+    expect(isProtectedPath("/home/user/.SSH/id_rsa")).toBe(true);
+  });
+
   it("leaves ordinary files alone", () => {
     expect(isProtectedPath("/project/src/index.ts")).toBe(false);
     expect(isProtectedPath("/project/README.md")).toBe(false);

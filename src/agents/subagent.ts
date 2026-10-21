@@ -9,6 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAgent } from "../agent/loop.js";
+import { VERSION } from "../version.js";
 import type { AgentOptions, AgentUi } from "../agent/types.js";
 import { type FlowError } from "../errors.js";
 import type { FlowCodeConfig } from "../config/types.js";
@@ -69,7 +70,7 @@ export const runSubAgent = async (
       id: `subagent-${definition.name}`,
       cwd: options.toolContext.cwd,
       startedAt: Date.now(),
-      flowCodeVersion: "0.0.0",
+      flowCodeVersion: VERSION,
       provider: options.provider.id,
       model: options.config.provider.model ?? "",
     },

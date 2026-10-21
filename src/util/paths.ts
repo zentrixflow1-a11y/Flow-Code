@@ -160,7 +160,9 @@ export const PROTECTED_FILE_PATTERNS: readonly RegExp[] = [
  * Whether a path is protected from writes.
  *
  * The check is on the path's own segments, so a directory called `.git`
- * anywhere on the path is enough to protect it.
+ * anywhere on the path is enough to protect it. The comparison ignores case,
+ * because `.GIT` is the same directory as `.git` on a case-insensitive
+ * filesystem — and refusing to write is the safe answer either way.
  *
  * @param path - The path to check.
  */
@@ -169,7 +171,8 @@ export const isProtectedPath = (path: string): boolean => {
   const segments = posix.split("/").filter((segment) => segment !== "");
 
   for (const segment of segments) {
-    if (PROTECTED_DIRECTORIES.includes(segment)) {
+    const lowered = segment.toLowerCase();
+    if (PROTECTED_DIRECTORIES.some((directory) => directory.toLowerCase() === lowered)) {
       return true;
     }
   }

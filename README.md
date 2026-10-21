@@ -515,6 +515,9 @@ itself. There is no sandbox for native Windows — run Flow Code inside WSL2
 to get one — and on macOS and Linux the sandbox is only used when one is
 actually installed.
 
+The sandbox confines **writes**. It does not cut the network: a command that
+needs to fetch something still can, on both platforms.
+
 So: the honest summary is that a command is *asked about*, not *confined*,
 unless you turn the sandbox on.
 
@@ -565,6 +568,7 @@ Type `/` in the session to see them.
 | `/tools` | List the tools the model may call |
 | `/plan` | Switch to plan mode |
 | `/mcp` | Show the MCP servers, their tools, and the sub-agents |
+| `/init` | Write a starting `FLOWCODE.md` from the repository |
 | `/exit` | Leave |
 
 ---
@@ -777,6 +781,18 @@ Every route needs a test.
 
 A rule with `paths` is only included when the session has touched a file that
 matches.
+
+### Starting the file yourself
+
+`/init` writes a starting `FLOWCODE.md` from what the repository says about
+itself: its name, its language, its package manager and the commands its
+manifest defines. The parts only a person knows are left as questions.
+
+```text
+/init
+```
+
+It never overwrites a `FLOWCODE.md` or an `AGENTS.md` that is already there.
 
 ---
 

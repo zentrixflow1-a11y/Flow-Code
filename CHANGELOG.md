@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`/init`**: writes a starting `FLOWCODE.md` from what the repository says
+  about itself — its name, its language, its package manager and the commands
+  its manifest defines. The parts only a person knows are left as questions,
+  and it never overwrites a `FLOWCODE.md` or an `AGENTS.md` that is already
+  there.
+
 - **One builder for the tool context** (`src/tools/context.ts`): every context
   in a session comes from it, so a sub-agent cannot end up with a weaker one
   than the agent that spawned it — the same redactor, the same guard, the
@@ -31,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A protected path was not protected when its case was not.** The check on
+  the path's segments compared them exactly, so `.GIT` and `.FlowCode` were
+  writable. The comparison ignores case now.
+- **A thrown error was not redacted.** A tool that crashed took its message
+  straight into the conversation, and the message can hold anything the tool
+  was working with.
 - **The punctuation in the documents was mis-decoded.** The README, the
   changelog, the contributing guide, the package description and two source
   files were written through a lossy encoding step, so an em dash read as
@@ -94,6 +106,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is never sent to an endpoint the user's own configuration did not choose.
 
 ### Changed
+
+- **The version lives in `package.json` and nowhere else.** `src/version.ts`
+  reads it from there, the session log records it, and a test checks that the
+  changelog's latest heading names the same version. The package said `0.1.0`
+  while the changelog had reached `0.7.0`; the package now says `0.7.0`.
+
+- **The two sandboxes behave the same way.** Seatbelt allowed the network
+  and bubblewrap did not, so the same command was confined differently on
+  macOS and on Linux. Both now confine writes and leave the network alone,
+  and the Seatbelt profile escapes the paths it is given, so a path with a
+  quote in it can no longer end a rule early.
 
 - **The README says what the shell is not.** The file tools are confined to
   the workspace; the shell is not. A command is asked about, not confined,

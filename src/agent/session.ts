@@ -6,6 +6,7 @@
  * log, and it knows how to run the agent over them.
  */
 import { readProjectInstructions } from "../context/instructions.js";
+import { VERSION } from "../version.js";
 import { compactMessages, SUMMARY_INSTRUCTION } from "../context/compactor.js";
 import { deriveMessages, filesReadIn } from "../session/replay.js";
 import { effectiveRules, loadConfig, type ConfigLayer } from "../config/load.js";
@@ -18,9 +19,10 @@ import type { ModelInfo, ModelProvider } from "../providers/types.js";
 import { createDefaultRegistry } from "../tools/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import { createToolContext } from "../tools/context.js";
+import { resolveToolPath, writeFileAtomically } from "../tools/fs.js";
 import type { ToolContext, ToolQuestion } from "../tools/types.js";
 import { createRedactor } from "../util/redact.js";
-import { realpathBestEffort } from "../util/paths.js";
+import { isProtectedPath, realpathBestEffort } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 import { readMcpConfig } from "../mcp/config.js";
 import { connectAll, type McpConnections } from "../mcp/client.js";
@@ -222,7 +224,7 @@ export class FlowSession {
           id: sessionId,
           cwd: options.cwd,
           startedAt: Date.now(),
-          flowCodeVersion: "0.0.0",
+          flowCodeVersion: VERSION,
           provider: built.value.id,
           model: config.provider.model ?? "",
         },
@@ -535,7 +537,7 @@ export class FlowSession {
         id: sessionId,
         cwd: this.cwd,
         startedAt: Date.now(),
-        flowCodeVersion: "0.0.0",
+        flowCodeVersion: VERSION,
         provider: this.provider.id,
         model: this.config.provider.model ?? "",
       },
@@ -720,7 +722,55 @@ export class FlowSession {
         name: agent.name,
         description: agent.description,
       })),
+      writeWorkspaceFile: (relativePath, content) =>
+        this.writeWorkspaceFile(relativePath, content),
     };
+  }
+
+  /**
+   * Write a file in the workspace.
+   *
+   * Only the commands that create a file use it. The path goes through the
+   * same rules as the file tools: it stays inside the workspace, and it is
+   * never a protected path.
+   *
+   * @param relativePath - Where to write, relative to the workspace.
+   * @param content - What to write.
+   */
+  async writeWorkspaceFile(
+    relativePath: string,
+    content: string,
+  ): Promise<Result<string, FlowError>> {
+    const context = await this.toolContext();
+    const resolved = await resolveToolPath(relativePath, context);
+    if (!resolved.ok) {
+      return resolved;
+    }
+
+    const path = resolved.value;
+    if (isProtectedPath(path)) {
+      return err(
+        flowError(
+          "permission_denied",
+          `'${path}' is a protected path and will not be written to.`,
+          { retryable: false },
+        ),
+      );
+    }
+
+    try {
+      await writeFileAtomically(path, content);
+    } catch (error) {
+      return err(
+        flowError(
+          "invalid_request",
+          `'${relativePath}' could not be written.`,
+          { retryable: false, cause: error },
+        ),
+      );
+    }
+
+    return ok(path);
   }
 
   /** The secrets that should never appear in the model's context. */

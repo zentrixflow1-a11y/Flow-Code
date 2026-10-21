@@ -83,6 +83,27 @@ describe("executeTool", () => {
     }
   });
 
+  it("redacts a secret from the message of a thrown error", async () => {
+    const throwing: ToolDefinition<Record<string, never>> = {
+      name: "boom",
+      description: "Always fails.",
+      schema: z.object({}),
+      category: "read",
+      subjectKind: "text",
+      concurrencySafe: true,
+      async execute() {
+        throw new Error("the key is AKIAIOSFODNN7EXAMPLE");
+      },
+    };
+
+    const result = await executeTool(throwing, {}, context());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).not.toContain("AKIAIOSFODNN7EXAMPLE");
+      expect(result.error.message).toContain("[redacted]");
+    }
+  });
+
   it("redacts secrets from an error message", async () => {
     const failing: ToolDefinition<Record<string, never>> = {
       name: "boom",
