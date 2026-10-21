@@ -11,6 +11,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
+import type { ProjectScope } from "../security/trust.js";
 import { err, ok, type Result } from "../util/result.js";
 
 /** The points in a session a hook can run at. */
@@ -68,16 +69,24 @@ export const projectHooksPath = (cwd: string): string =>
 /**
  * Read the configured hooks.
  *
+ * The project's file is only read when the directory has been trusted,
+ * because a hook is a command that Flow Code runs.
+ *
  * @param options - Where to look.
  */
 export const readHooks = async (
   options: {
     readonly cwd: string;
     readonly home?: string;
+    /** Whether the project's own file may be read. */
+    readonly project?: ProjectScope;
   },
 ): Promise<Result<readonly HookDefinition[], FlowError>> => {
   const home = options.home ?? homedir();
-  const paths = [globalHooksPath(home), projectHooksPath(options.cwd)];
+  const paths =
+    (options.project ?? "untrusted") === "trusted"
+      ? [globalHooksPath(home), projectHooksPath(options.cwd)]
+      : [globalHooksPath(home)];
 
   const hooks: HookDefinition[] = [];
 

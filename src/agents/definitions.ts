@@ -7,6 +7,7 @@
  */
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { ProjectScope } from "../security/trust.js";
 import { toPosix } from "../util/paths.js";
 
 /** The directory sub-agents live in. */
@@ -33,11 +34,23 @@ export interface AgentDefinition {
 /**
  * Read the sub-agents a project defines.
  *
+ * The definitions are only read when the directory has been trusted, because
+ * a sub-agent is a set of instructions and a set of tools.
+ *
  * @param cwd - The project's directory.
+ * @param options - Whether the project's own files may be read.
  */
 export const readAgentDefinitions = async (
   cwd: string,
+  options: {
+    /** Whether the project's own files may be read. */
+    readonly project?: ProjectScope;
+  } = {},
 ): Promise<readonly AgentDefinition[]> => {
+  if ((options.project ?? "untrusted") !== "trusted") {
+    return [];
+  }
+
   const directory = join(cwd, ...AGENTS_DIRECTORY.split("/"));
 
   let entries: string[];

@@ -8,6 +8,7 @@ import { runDoctor } from "../doctor.js";
 import { FlowSession } from "../agent/session.js";
 import { runInteractive } from "../ui/run.js";
 import { PERMISSION_MODES, type PermissionMode } from "../permissions/types.js";
+import { createInterface } from "node:readline/promises";
 
 /**
  * The seams the CLI needs from its host process.
@@ -149,6 +150,34 @@ export const runCli = async (
   return runInteractiveSession(flags, deps);
 };
 
+/**
+ * Ask the user a yes-or-no question on the terminal.
+ *
+ * The answer is a plain "y" or "yes"; anything else is a no, because the
+ * question is about running code from a directory.
+ *
+ * @param question - The question to ask.
+ * @param deps - The host seams.
+ */
+const confirmTrust = async (
+  question: string,
+  deps: CliDeps,
+): Promise<boolean> => {
+  const input = deps.stdin ?? process.stdin;
+  const output = deps.stdout ?? process.stdout;
+  const rl = createInterface({ input, output });
+
+  try {
+    const answer = await rl.question(`${question} [y/N] `);
+    return /^y(es)?$/i.test(answer.trim());
+  } catch {
+    // A terminal that cannot answer is a terminal that has said no.
+    return false;
+  } finally {
+    rl.close();
+  }
+};
+
 /** Start the interactive terminal session. */
 const runInteractiveSession = async (
   flags: Readonly<Record<string, string | boolean>>,
@@ -174,6 +203,7 @@ const runInteractiveSession = async (
     cwd: deps.cwd,
     ...(deps.home === undefined ? {} : { home: deps.home }),
     env: deps.env,
+    confirmTrust: (question) => confirmTrust(question, deps),
     overrides: {
       ...(stringFlag(flags, "provider") === undefined
         ? {}

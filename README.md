@@ -38,6 +38,7 @@ picking one.
 - [Quick start with a local model](#quick-start-with-a-local-model)
 - [Using a hosted provider](#using-a-hosted-provider)
 - [Configuration](#configuration)
+- [Trusting a project](#trusting-a-project)
 - [The tools](#the-tools)
 - [Permissions](#permissions)
 - [Slash commands](#slash-commands)
@@ -88,6 +89,7 @@ Flow Code is young and honest about it. What works today:
 | Headless mode (`flowcode -p`) | Working |
 | Setup wizard and `flowcode doctor` | Working |
 | MCP client, sub-agents, hooks | Working |
+| Workspace trust for a project's own files | Working |
 | Operating-system sandbox | Opt-in; macOS and Linux only |
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the detail, and
@@ -227,13 +229,17 @@ command line  >  environment  >  .flowcode/config.local.json  >  .flowcode/confi
 | File | Who it is for |
 | --- | --- |
 | `~/.flowcode/config.json` | You, on this machine, everywhere |
-| `~/.flowcode/config.local.json` | You, on this machine, this project only |
+| `~/.flowcode/config.local.json` | You, on this machine |
 | `.flowcode/config.json` | The project Ã¢â‚¬â€ commit it, so your team shares it |
 | `.flowcode/config.local.json` | You, this project Ã¢â‚¬â€ do not commit it |
 
 `config.local.json` is the personal one; add it to `.gitignore`. Permission
 rule *lists* merge across all four files, so a project can add a rule without
 removing yours. Everything else is replaced by the higher-precedence file.
+
+A project's own two files are only read once you have trusted the directory,
+and even then they may only add `deny` and `ask` rules. See
+[Trusting a project](#trusting-a-project).
 
 ### The whole configuration
 
@@ -301,6 +307,53 @@ removing yours. Everything else is replaced by the higher-precedence file.
 | `FLOWCODE_API_KEY` | The API key, when the provider uses one |
 | `FLOWCODE_PERMISSION_MODE` | The permission mode |
 | `FLOWCODE_HOME` | Where Flow Code keeps its configuration and sessions |
+
+---
+
+## Trusting a project
+
+A project's own files are not data. A hook is a command, an MCP server is a
+program, and a configuration file says where your API key is sent. So Flow
+Code does not read any of them until you have said that you trust the
+directory.
+
+The first time you run Flow Code in a directory that has a `.flowcode`
+folder, it asks:
+
+```
+This directory has .flowcode files, which Flow Code reads as configuration,
+hooks, MCP servers and sub-agents — they can run commands on your machine.
+Trust '/home/you/project'?
+```
+
+Answer `y` and the directory is remembered in `~/.flowcode/trusted.json`. The
+question is asked once per directory.
+
+Until you answer yes:
+
+| File | What happens |
+| --- | --- |
+| `.flowcode/config.json` | Ignored |
+| `.flowcode/config.local.json` | Ignored |
+| `.flowcode/hooks.json` | Ignored — no hook runs |
+| `.flowcode/mcp.json` | Ignored — no server is started |
+| `.flowcode/agents/` | Ignored — no sub-agent is defined |
+
+Headless mode never asks, because there is nobody to ask. It ignores the
+project's files and says so on standard error.
+
+Trust is per directory, and it is not inherited: a subdirectory of a trusted
+directory is a directory of its own.
+
+**Even in a trusted directory, a project may only add rules.** It cannot
+choose the endpoint your API key is sent to, the environment variable that
+holds the key, the permission mode, the allow list, the security settings or
+the shell. Those come from your own configuration, your environment and the
+command line — never from a checkout.
+
+> A rule you add with a slash command is saved in your own configuration
+> (`~/.flowcode/config.local.json`), not in the project's, so that it keeps
+> working wherever you run Flow Code.
 
 ---
 

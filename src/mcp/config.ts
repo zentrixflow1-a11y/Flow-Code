@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
+import type { ProjectScope } from "../security/trust.js";
 import { err, ok, type Result } from "../util/result.js";
 
 /** One configured MCP server. */
@@ -48,7 +49,9 @@ export const projectMcpConfigPath = (cwd: string): string =>
 /**
  * Read the configured servers.
  *
- * The project's file wins over the global one, per server.
+ * The project's file wins over the global one, per server. The project's file
+ * is only read when the directory has been trusted, because a server is a
+ * program that Flow Code starts.
  *
  * @param options - Where to look.
  */
@@ -56,10 +59,15 @@ export const readMcpConfig = async (
   options: {
     readonly cwd: string;
     readonly home?: string;
+    /** Whether the project's own file may be read. */
+    readonly project?: ProjectScope;
   },
 ): Promise<Result<readonly McpServerConfig[], FlowError>> => {
   const home = options.home ?? homedir();
-  const paths = [globalMcpConfigPath(home), projectMcpConfigPath(options.cwd)];
+  const paths =
+    (options.project ?? "untrusted") === "trusted"
+      ? [globalMcpConfigPath(home), projectMcpConfigPath(options.cwd)]
+      : [globalMcpConfigPath(home)];
 
   const servers = new Map<string, McpServerConfig>();
 

@@ -109,6 +109,15 @@ export const runHeadless = async (options: HeadlessOptions): Promise<number> => 
     return 1;
   }
 
+  // There is nobody to ask in headless mode, so an untrusted directory is
+  // simply used without its own files. Saying so is better than pretending
+  // the project's settings were in force.
+  if (!session.value.workspaceTrusted) {
+    options.stderr(
+      `flowcode: ${session.value.trustNote ?? "This directory is not trusted."} The project's .flowcode files (configuration, hooks, MCP servers and sub-agents) were ignored.`,
+    );
+  }
+
   try {
     const result = await session.value.run(options.task);
     const text = collected.join("");

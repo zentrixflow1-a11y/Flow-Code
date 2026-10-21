@@ -43,6 +43,12 @@ export const runInteractive = async (
   const { session } = options;
   const state = new UiState();
 
+  if (!session.workspaceTrusted) {
+    state.notify(
+      `${session.trustNote ?? "This directory is not trusted."} The project's .flowcode files were ignored.`,
+    );
+  }
+
   state.setStatus({
     provider: session.config.provider.provider,
     model: session.config.provider.model ?? "",

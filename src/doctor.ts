@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { effectiveRules, loadConfig } from "./config/load.js";
 import { createProvider } from "./providers/factory.js";
 import { findPreset } from "./providers/presets.js";
+import { isTrustedDirectory, listProjectFiles } from "./security/trust.js";
 import { createDefaultRegistry } from "./tools/index.js";
 import { formatBytes } from "./util/text.js";
 
@@ -44,7 +45,30 @@ export const runDoctor = async (options: DoctorOptions): Promise<number> => {
 
   const checks: Check[] = [];
 
-  const loaded = await loadConfig({ home, cwd: options.cwd, env });
+  // The health check never asks a question, so it uses the trust store as it
+  // stands: a directory that has not been trusted is reported as untrusted
+  // and its own files are ignored.
+  const projectFiles = await listProjectFiles(options.cwd);
+  const trusted = await isTrustedDirectory({ home, directory: options.cwd });
+
+  if (projectFiles.length > 0) {
+    checks.push({
+      name: "Trust",
+      // An untrusted directory is the safe default, not a misconfiguration,
+      // so it is reported rather than counted as a problem.
+      ok: true,
+      detail: trusted
+        ? "this directory is trusted"
+        : "this directory is not trusted; its .flowcode files were ignored",
+    });
+  }
+
+  const loaded = await loadConfig({
+    home,
+    cwd: options.cwd,
+    env,
+    project: trusted ? "trusted" : "untrusted",
+  });
   if (!loaded.ok) {
     checks.push({ name: "Configuration", ok: false, detail: loaded.error.message });
     return report(checks, out);

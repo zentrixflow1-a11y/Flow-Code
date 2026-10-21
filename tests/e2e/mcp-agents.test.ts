@@ -1,7 +1,10 @@
 /**
  * MCP servers, sub-agents and hooks, in a real session.
+ *
+ * A project's own files are only read once the directory has been trusted, so
+ * every session here starts by trusting the workspace.
  */
-import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +16,25 @@ const MCP_SERVER = fileURLToPath(
   new URL("../../scripts/mock-mcp-server.mjs", import.meta.url),
 );
 
+/**
+ * Remember the workspace as trusted, so the project's own files are read.
+ *
+ * @param home - The user's home directory.
+ * @param workspace - The directory to trust.
+ */
+const trustWorkspace = async (
+  home: string,
+  workspace: string,
+): Promise<void> => {
+  const resolved = await realpath(workspace);
+  await mkdir(join(home, ".flowcode"), { recursive: true });
+  await writeFile(
+    join(home, ".flowcode", "trusted.json"),
+    JSON.stringify({ version: 1, directories: [resolved] }),
+    "utf8",
+  );
+};
+
 describe("a session with an MCP server", () => {
   let server: MockServer;
   let home: string;
@@ -22,6 +44,7 @@ describe("a session with an MCP server", () => {
     server = await startMockServer({ MOCK_SCENARIO: "mcp" });
     home = await mkdtemp(join(tmpdir(), "flowcode-mcp-e2e-home-"));
     workspace = await mkdtemp(join(tmpdir(), "flowcode-mcp-e2e-work-"));
+    await trustWorkspace(home, workspace);
 
     await mkdir(join(workspace, ".flowcode"), { recursive: true });
     await writeFile(
@@ -125,6 +148,7 @@ describe("a session with a hook", () => {
     server = await startMockServer({ MOCK_SCENARIO: "tour" });
     home = await mkdtemp(join(tmpdir(), "flowcode-hook-e2e-home-"));
     workspace = await mkdtemp(join(tmpdir(), "flowcode-hook-e2e-work-"));
+    await trustWorkspace(home, workspace);
     await writeFile(join(workspace, "README.md"), "# The project\n", "utf8");
   });
 
@@ -249,6 +273,7 @@ describe("a session with a sub-agent", () => {
     server = await startMockServer({ MOCK_SCENARIO: "subagent" });
     home = await mkdtemp(join(tmpdir(), "flowcode-sub-e2e-home-"));
     workspace = await mkdtemp(join(tmpdir(), "flowcode-sub-e2e-work-"));
+    await trustWorkspace(home, workspace);
     await writeFile(join(workspace, "README.md"), "# The project\n", "utf8");
 
     await mkdir(join(workspace, ".flowcode", "agents"), { recursive: true });

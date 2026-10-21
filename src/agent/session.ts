@@ -27,6 +27,10 @@ import { readAgentDefinitions, type AgentDefinition } from "../agents/definition
 import { runSubAgent } from "../agents/subagent.js";
 import { readHooks, type HookDefinition } from "../hooks/runner.js";
 import { detectSandbox, type SandboxKind } from "../security/sandbox.js";
+import {
+  resolveWorkspaceTrust,
+  type ProjectScope,
+} from "../security/trust.js";
 import { runAgent } from "./loop.js";
 import type { CommandServices } from "../commands/types.js";
 import type { AgentOptions, AgentResult, AgentUi, ApprovalDecision } from "./types.js";
@@ -62,6 +66,20 @@ export interface FlowSessionOptions {
     readonly baseUrl?: string;
     readonly permissionMode?: PermissionMode;
   };
+  /**
+   * Whether the directory has been trusted.
+   *
+   * When it is not set, the session works it out: the store is consulted
+   * first, and the question is only asked when a way to ask is given.
+   */
+  readonly trusted?: boolean;
+  /**
+   * Asks the user whether the directory may be used.
+   *
+   * Without it, a directory that is not already trusted is not used, and its
+   * own files are ignored.
+   */
+  readonly confirmTrust?: (question: string) => Promise<boolean>;
 }
 
 /** A running Flow Code session. */
@@ -86,6 +104,10 @@ export class FlowSession {
   subAgents: readonly AgentDefinition[] = [];
   /** The hooks the project configures. */
   hooks: readonly HookDefinition[] = [];
+  /** Whether the directory's own files may be read. */
+  workspaceTrusted = true;
+  /** Why the directory's own files were ignored, when they were. */
+  trustNote: string | undefined;
   /** Why the sandbox is not in use, when it was asked for and is not available. */
   sandboxNote: string | undefined;
 
@@ -134,11 +156,25 @@ export class FlowSession {
     const home = options.home ?? homedir();
     const env = options.env ?? process.env;
 
+    // A project's own files are code. They are only read once the directory
+    // has been trusted, and the question is only asked when there is a way to
+    // ask it.
+    const trust = await resolveWorkspaceTrust({
+      home,
+      cwd: options.cwd,
+      ...(options.trusted === undefined ? {} : { trusted: options.trusted }),
+      ...(options.confirmTrust === undefined
+        ? {}
+        : { confirm: options.confirmTrust }),
+    });
+    const scope: ProjectScope = trust.trusted ? "trusted" : "untrusted";
+
     const overrides = buildOverrides(options.overrides);
     const loaded = await loadConfig({
       home,
       cwd: options.cwd,
       env,
+      project: scope,
       ...(overrides === undefined ? {} : { overrides }),
     });
     if (!loaded.ok) {
@@ -182,6 +218,8 @@ export class FlowSession {
     }
 
     const session = new FlowSession(options, config, built.value, log);
+    session.workspaceTrusted = trust.trusted;
+    session.trustNote = trust.reason;
     session.projectInstructions = (await readProjectInstructions(options.cwd)).text;
 
     // The permission engine compares a rule's specifier with a resolved path,
@@ -192,8 +230,9 @@ export class FlowSession {
     session.#resolvedCwd = resolvedCwd;
 
     // The MCP servers, the sub-agents and the hooks are all optional. A
-    // missing or broken one must not stop the session.
-    const mcpConfig = await readMcpConfig({ cwd: options.cwd, home });
+    // missing or broken one must not stop the session. A project's own files
+    // are read only when the directory has been trusted.
+    const mcpConfig = await readMcpConfig({ cwd: options.cwd, home, project: scope });
     if (mcpConfig.ok && mcpConfig.value.length > 0) {
       session.mcp = await connectAll(mcpConfig.value, {
         cwd: options.cwd,
@@ -214,9 +253,9 @@ export class FlowSession {
       }
     }
 
-    session.subAgents = await readAgentDefinitions(options.cwd);
+    session.subAgents = await readAgentDefinitions(options.cwd, { project: scope });
 
-    const hooks = await readHooks({ cwd: options.cwd, home });
+    const hooks = await readHooks({ cwd: options.cwd, home, project: scope });
     if (hooks.ok) {
       session.hooks = hooks.value;
     }
@@ -507,6 +546,11 @@ export class FlowSession {
   /**
    * Remember a permission rule.
    *
+   * The rule is saved in the user's own configuration. A project's file may
+   * only add rules that tighten the harness, so a rule saved there would be
+   * ignored — or would stop being honoured the moment the directory was no
+   * longer trusted.
+   *
    * @param rule - The rule.
    * @param bucket - Which list it goes in.
    */
@@ -517,7 +561,7 @@ export class FlowSession {
     const saved = await persistRule({
       rule,
       bucket,
-      scope: "project",
+      scope: "user",
       cwd: this.cwd,
       home: this.#home,
     });

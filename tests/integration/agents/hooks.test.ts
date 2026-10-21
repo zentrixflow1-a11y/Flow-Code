@@ -68,13 +68,13 @@ describe("sub-agent definitions", () => {
       "utf8",
     );
 
-    const definitions = await readAgentDefinitions(workspace);
+    const definitions = await readAgentDefinitions(workspace, { project: "trusted" });
     expect(definitions).toHaveLength(1);
     expect(definitions[0]?.name).toBe("reviewer");
   });
 
   it("finds nothing in a project with no agents", async () => {
-    expect(await readAgentDefinitions(workspace)).toEqual([]);
+    expect(await readAgentDefinitions(workspace, { project: "trusted" })).toEqual([]);
   });
 
   it("restricts the tools when the definition says so", () => {
@@ -148,7 +148,7 @@ describe("hooks", () => {
       "utf8",
     );
 
-    const result = await readHooks({ cwd: workspace, home });
+    const result = await readHooks({ cwd: workspace, home, project: "trusted" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toHaveLength(2);
@@ -165,7 +165,7 @@ describe("hooks", () => {
       "utf8",
     );
 
-    const result = await readHooks({ cwd: workspace, home });
+    const result = await readHooks({ cwd: workspace, home, project: "trusted" });
     if (result.ok) {
       expect(result.value).toEqual([]);
     }

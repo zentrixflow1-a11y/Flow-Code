@@ -10,6 +10,11 @@
  *
  * Lists of permission rules merge across scopes, so a project can add a rule
  * without removing the user's own.
+ *
+ * A project's own files are only read once the directory has been trusted,
+ * and even then a project may only *tighten* the rules that apply to it. It
+ * may not choose the endpoint an API key is sent to, the key that is sent
+ * there, the permission mode, or the security settings.
  */
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -17,6 +22,7 @@ import { join } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
 import { DEFAULT_RULES } from "../permissions/defaults.js";
 import { PERMISSION_MODES, type PermissionMode } from "../permissions/types.js";
+import type { ProjectScope } from "../security/trust.js";
 import { err, ok, type Result } from "../util/result.js";
 import { DEFAULT_CONFIG, type FlowCodeConfig } from "./types.js";
 
@@ -87,22 +93,43 @@ export const loadConfig = async (
     readonly cwd: string;
     readonly env?: NodeJS.ProcessEnv;
     readonly overrides?: ConfigLayer;
+    /**
+     * Whether the project's own files may be read.
+     *
+     * The default is `untrusted`, so a caller that has not thought about it
+     * cannot pick up a project's settings by accident.
+     */
+    readonly project?: ProjectScope;
   },
 ): Promise<Result<FlowCodeConfig, FlowError>> => {
   const home = options.home ?? homedir();
   const env = options.env ?? process.env;
+  const scope = options.project ?? "untrusted";
   const sources = locateConfigFiles(home, options.cwd);
 
   const layers: PartialConfig[] = [];
-  for (const path of [sources.user, sources.userLocal, sources.project, sources.projectLocal]) {
-    if (path === undefined) {
+  const sourcesToRead: { readonly path: string | undefined; readonly project: boolean }[] = [
+    { path: sources.user, project: false },
+    { path: sources.userLocal, project: false },
+    ...(scope === "trusted"
+      ? [
+          { path: sources.project, project: true },
+          { path: sources.projectLocal, project: true },
+        ]
+      : []),
+  ];
+
+  for (const source of sourcesToRead) {
+    if (source.path === undefined) {
       continue;
     }
-    const read = await readConfigFile(path);
+    const read = await readConfigFile(source.path);
     if (!read.ok) {
       return read;
     }
-    layers.push(read.value);
+    layers.push(
+      source.project ? restrictProjectLayer(read.value) : read.value,
+    );
   }
 
   const merged = mergeLayers(layers);
@@ -110,6 +137,32 @@ export const loadConfig = async (
   const config = applyOverrides(merged, fromEnvironment, options.overrides);
 
   return ok(config);
+};
+
+/**
+ * What a project's own configuration is allowed to say.
+ *
+ * A project may only add rules that make the harness more careful. It may not
+ * choose the provider's endpoint or the key that is sent to it, the
+ * permission mode, the allow list, the security settings, or the shell —
+ * a checkout of somebody else's repository must never be able to redirect an
+ * API key or switch the sandbox off.
+ *
+ * @param layer - The layer as it was read from disk.
+ */
+export const restrictProjectLayer = (layer: PartialConfig): PartialConfig => {
+  const permissions = layer.permissions;
+
+  if (permissions === undefined) {
+    return {};
+  }
+
+  return {
+    permissions: {
+      ...(permissions.deny === undefined ? {} : { deny: permissions.deny }),
+      ...(permissions.ask === undefined ? {} : { ask: permissions.ask }),
+    },
+  };
 };
 
 /** Where the configuration files are. */

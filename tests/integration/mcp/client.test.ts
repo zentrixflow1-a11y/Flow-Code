@@ -149,7 +149,7 @@ describe("the MCP configuration", () => {
       mcpServers: { project: { command: "project-server" } },
     });
 
-    const result = await readMcpConfig({ cwd: workspace, home });
+    const result = await readMcpConfig({ cwd: workspace, home, project: "trusted" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.map((server) => server.name).sort()).toEqual([
@@ -167,7 +167,7 @@ describe("the MCP configuration", () => {
       mcpServers: { shared: { command: "project-server" } },
     });
 
-    const result = await readMcpConfig({ cwd: workspace, home });
+    const result = await readMcpConfig({ cwd: workspace, home, project: "trusted" });
     if (result.ok) {
       expect(result.value).toHaveLength(1);
       expect(result.value[0]?.command).toBe("project-server");
@@ -179,7 +179,7 @@ describe("the MCP configuration", () => {
       mcpServers: { remote: { url: "https://mcp.example.com/mcp" } },
     });
 
-    const result = await readMcpConfig({ cwd: workspace, home });
+    const result = await readMcpConfig({ cwd: workspace, home, project: "trusted" });
     if (result.ok) {
       expect(result.value[0]?.type).toBe("http");
       expect(result.value[0]?.url).toBe("https://mcp.example.com/mcp");
@@ -190,7 +190,7 @@ describe("the MCP configuration", () => {
     await mkdir(join(workspace, ".flowcode"), { recursive: true });
     await writeFile(join(workspace, ".flowcode", "mcp.json"), "{ not json", "utf8");
 
-    const result = await readMcpConfig({ cwd: workspace, home });
+    const result = await readMcpConfig({ cwd: workspace, home, project: "trusted" });
     expect(result.ok).toBe(false);
   });
 });

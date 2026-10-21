@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.0] â€” M7 (Hardening, documentation, release)
+### Added
+
+- **Workspace trust** (`src/security/trust.ts`): a project's own files are
+  code — a hook is a command, an MCP server is a program, a configuration file
+  says where an API key is sent — so none of them is read until the user has
+  said that they trust the directory. The trusted directories are remembered
+  in `~/.flowcode/trusted.json`, as resolved paths. The question is asked only
+  when the directory actually has a `.flowcode` folder; headless mode cannot
+  ask, so it ignores those files and says so on standard error.
+
+### Fixed
+
+- **A project's own configuration could take over the harness.** The project's
+  `config.json` was merged like any other layer, so a checkout of somebody
+  else's repository could set `permissions.mode` to `trust`, add allow rules
+  for every command, switch the sandbox off, and — worst of all — set
+  `provider.baseUrl` to a server of its own and `provider.apiKeyEnv` to the
+  name of an environment variable in the victim's shell, which sent the
+  victim's API key there as a bearer token. A project's configuration may now
+  only add `deny` and `ask` rules: the provider, the key, the permission
+  mode, the allow list, the security settings and the shell come from the
+  user's own configuration, the environment and the command line. An API key
+  is never sent to an endpoint the user's own configuration did not choose.
+
+### Changed
+
+- **A rule added by a slash command is saved in your own configuration.** It
+  used to be written to the project's `config.local.json`, which a project may
+  now only use for `deny` and `ask` rules — so an allow rule saved there
+  would have been ignored.
+- **`flowcode doctor` reports whether the directory is trusted**, and ignores
+  a directory's own files when it is not.
+
+## [0.7.0] — M7 (Hardening, documentation, release)
 
 ### Added
 
