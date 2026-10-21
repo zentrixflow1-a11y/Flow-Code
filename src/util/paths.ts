@@ -81,6 +81,11 @@ export const realpathBestEffort = async (
 /**
  * Resolve a path and confirm it stays inside the allowed roots.
  *
+ * Both sides are resolved before they are compared. That matters: on macOS a
+ * temporary directory is reached through `/var`, which is a symlink to
+ * `/private/var`, so comparing a resolved path with an unresolved root would
+ * refuse every file in the workspace.
+ *
  * @param candidate - The path the model asked for.
  * @param policy - The allowed roots.
  */
@@ -91,7 +96,6 @@ export const resolveWithinRoots = async (
   const absolute = isAbsolute(candidate)
     ? normalize(candidate)
     : resolve(policy.cwd, candidate);
-  const requested = toPosix(absolute);
 
   const resolved = await realpathBestEffort(absolute);
   if (resolved === undefined) {
@@ -105,13 +109,15 @@ export const resolveWithinRoots = async (
   }
 
   const target = toPosix(resolved);
-  const caseInsensitive = policy.caseInsensitive ?? false;
 
-  const allowed = policy.roots.some(
-    (root) =>
-      isInside(target, root, caseInsensitive) &&
-      isInside(requested, root, caseInsensitive),
+  const roots = await Promise.all(
+    policy.roots.map(async (root) => {
+      const resolvedRoot = await realpathBestEffort(root);
+      return toPosix(resolvedRoot ?? normalize(root));
+    }),
   );
+
+  const allowed = roots.some((root) => isInside(target, root, policy.caseInsensitive));
 
   if (!allowed) {
     return err(

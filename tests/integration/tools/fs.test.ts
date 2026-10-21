@@ -1,7 +1,8 @@
 /**
  * The filesystem tools, against a real workspace on disk.
  */
-import { readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { editFileTool, listDirTool, readFileTool, writeFileTool } from "../../../src/tools/fs.js";
@@ -201,8 +202,7 @@ describe("the filesystem tools", () => {
   });
 
   describe("symlink escapes", () => {
-    it("refuses to follow a symlink that points outside the workspace", async () => {
-      const outside = join(workspace.root, "..", `outside-${Date.now()}.txt`);
+    it("refuses to follow a symlink that points outside the workspace", async () => {      const outside = join(workspace.root, "..", `outside-${Date.now()}.txt`);
       await writeFile(outside, "secret", "utf8");
       const link = join(workspace.root, "link.txt");
 
@@ -239,6 +239,41 @@ describe("the filesystem tools", () => {
       );
       expect(result.ok).toBe(false);
       expect(await readFile(outside, "utf8")).toBe("original");
+    });
+  });
+
+  describe("a workspace root that is itself a symlink", () => {
+    it("still allows the files inside it", async () => {
+      // On macOS a temporary directory is reached through `/var`, which is a
+      // symlink to `/private/var`. The sandbox has to compare resolved paths
+      // on both sides, or every file in the workspace is refused.
+      const real = await mkdtemp(join(tmpdir(), "flowcode-real-"));
+      const link = join(tmpdir(), `flowcode-link-${Date.now()}`);
+
+      try {
+        await symlink(real, link, "dir");
+      } catch {
+        // Creating a symlink needs a privilege Windows does not grant by
+        // default.
+        return;
+      }
+
+      const context = {
+        ...workspace.context,
+        cwd: link,
+        workspaceRoot: link,
+      };
+
+      const written = await executeTool(
+        writeFileTool,
+        { path: "inside.txt", content: "hello" },
+        context,
+      );
+      expect(written.ok).toBe(true);
+      expect(await readFile(join(real, "inside.txt"), "utf8")).toBe("hello");
+
+      const read = await executeTool(readFileTool, { path: "inside.txt" }, context);
+      expect(read.ok).toBe(true);
     });
   });
 });

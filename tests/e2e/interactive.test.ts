@@ -139,14 +139,12 @@ describe("the interactive session", () => {
       stdout: terminal.stdout,
       stdin: terminal.stdin,
     });
-
     await terminal.waitFor("+---");
     terminal.send("/help");
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await terminal.waitFor("/help");
     terminal.send("\r");
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(await terminal.waitFor("/compact")).toBe(true);
 
-    expect(terminal.text()).toContain("/compact");
     terminal.send("/exit");
     terminal.send("\r");
     await running;

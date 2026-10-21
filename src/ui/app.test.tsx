@@ -16,6 +16,7 @@ const fakeTerminal = (): {
   readonly stdin: NodeJS.ReadStream;
   readonly text: () => string;
   readonly send: (keys: string) => void;
+  readonly waitFor: (text: string, timeoutMs?: number) => Promise<boolean>;
 } => {
   let output = "";
   let pending: string | undefined;
@@ -83,6 +84,18 @@ const fakeTerminal = (): {
         handler();
       }
     },
+    // The interface draws on its own schedule, so the tests wait for what
+    // they are looking for rather than for a fixed number of milliseconds.
+    waitFor: async (text, timeoutMs = 10_000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (output.includes(text)) {
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return false;
+    },
   };
 };
 
@@ -110,8 +123,9 @@ const renderApp = async (
     },
   );
 
-  // Give Ink a moment to lay the first frame out.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // Wait for the first frame rather than for a fixed delay, so the test does
+  // not depend on how fast the machine draws.
+  await terminal.waitFor("+---");
   app.unmount();
 
   return terminal.text();
@@ -124,6 +138,7 @@ const renderLiveApp = async (
 ): Promise<{
   readonly send: (keys: string) => void;
   readonly text: () => string;
+  readonly waitFor: (text: string, timeoutMs?: number) => Promise<boolean>;
   readonly stop: () => void;
 }> => {
   const terminal = fakeTerminal();
@@ -146,11 +161,13 @@ const renderLiveApp = async (
     },
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // Wait for the first frame rather than for a fixed delay.
+  await terminal.waitFor("+---");
 
   return {
     send: terminal.send,
     text: terminal.text,
+    waitFor: terminal.waitFor,
     stop: () => app.unmount(),
   };
 };
@@ -222,9 +239,7 @@ describe("the terminal interface", () => {
     const live = await renderLiveApp(state);
 
     live.send("hello");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(live.text()).toContain("hello");
+    expect(await live.waitFor("hello")).toBe(true);
     live.stop();
   });
 
@@ -238,9 +253,7 @@ describe("the terminal interface", () => {
     });
 
     live.send("hello");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(live.text()).toContain("hello");
+    expect(await live.waitFor("hello")).toBe(true);
     live.stop();
   });
 
@@ -256,9 +269,13 @@ describe("the terminal interface", () => {
     });
 
     live.send("/help");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await live.waitFor("/help");
     live.send("\r");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const deadline = Date.now() + 5_000;
+    while (submitted.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
 
     expect(submitted).toEqual(["/help"]);
     live.stop();
@@ -274,9 +291,7 @@ describe("the terminal interface", () => {
     });
 
     live.send("/mo");
-    await new Promise((resolve) => setTimeout(resolve, 80));
-
-    expect(live.text()).toContain("model");
+    expect(await live.waitFor("model")).toBe(true);
     live.stop();
   });
 
@@ -287,17 +302,21 @@ describe("the terminal interface", () => {
       onSubmit: (text) => void submitted.push(text),
     });
 
-    live.send("first");
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    live.send("remembered-entry");
+    await live.waitFor("remembered-entry");
     live.send("\r");
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // The up arrow walks back through the history.
+    const deadline = Date.now() + 5_000;
+    while (submitted.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(submitted).toEqual(["remembered-entry"]);
+
+    // The up arrow walks back through the history, so the text comes back.
+    const before = live.text().length;
     live.send("[A");
-    await new Promise((resolve) => setTimeout(resolve, 60));
-
-    expect(live.text()).toContain("first");
-    expect(submitted).toEqual(["first"]);
+    expect(await live.waitFor("remembered-entry")).toBe(true);
+    expect(live.text().length).toBeGreaterThan(before);
     live.stop();
   });
 
@@ -307,9 +326,13 @@ describe("the terminal interface", () => {
     const live = await renderLiveApp(state, { onSubmit: (text) => void submitted.push(text) });
 
     live.send("do it");
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await live.waitFor("do it");
     live.send("\r");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const deadline = Date.now() + 5_000;
+    while (submitted.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
 
     expect(submitted).toEqual(["do it"]);
     live.stop();

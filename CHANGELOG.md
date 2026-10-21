@@ -30,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   temporary prefix and carried out a task against a mock model server, which
   is exactly what the README tells a reader to do.
 
+### Fixed
+
+- **The path sandbox compared a resolved path with an unresolved root.** On
+  macOS a temporary directory is reached through `/var`, which is a symlink to
+  `/private/var`, so every file in the workspace was refused. Both sides are
+  now resolved before they are compared. There is a regression test for it.
+- The terminal interface tests waited for a fixed number of milliseconds for
+  the first frame. They now wait for the frame itself, so they do not depend
+  on how fast the machine draws.
+
 ### Notes and deviations from `PLAN.md`
 
 - The **diagnostic output is plain ASCII** (`flowcode doctor`, `flowcode
