@@ -37,9 +37,34 @@ export interface ShellInvocation {
 /**
  * Choose the shell to run a command in.
  *
+ * The `shell` setting names the shell: `powershell`, `cmd` or `bash`. Without
+ * it, the platform's own shell is used.
+ *
  * @param platform - The host platform.
+ * @param shell - The shell the user asked for, if any.
  */
-export const shellFor = (platform: NodeJS.Platform): ShellInvocation => {
+export const shellFor = (
+  platform: NodeJS.Platform,
+  shell?: string,
+): ShellInvocation => {
+  switch (shell?.trim().toLowerCase()) {
+    case "powershell":
+    case "pwsh":
+      return {
+        command: "powershell.exe",
+        args: ["-NoProfile", "-NonInteractive", "-Command"],
+      };
+    case "cmd":
+      return {
+        command: "cmd.exe",
+        args: ["/d", "/s", "/c"],
+      };
+    case "bash":
+      return { command: "bash", args: ["-c"] };
+    default:
+      break;
+  }
+
   if (platform === "win32") {
     return {
       command: "powershell.exe",
@@ -119,7 +144,7 @@ export const runCommandTool: ToolDefinition<z.infer<typeof runCommandArgs>> = {
       return { ok: false, error: resolved.error };
     }
 
-    const shell = shellFor(context.platform);
+    const shell = shellFor(context.platform, context.shell);
     const timeout = Math.min(args.timeout_ms ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
     // When the sandbox is in use, the command runs inside it.

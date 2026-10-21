@@ -34,6 +34,12 @@ export interface ToolContextOptions {
   readonly signal?: AbortSignal;
   /** The host platform. */
   readonly platform?: NodeJS.Platform;
+  /**
+   * The shell commands run in, when the user asked for one.
+   *
+   * `powershell`, `cmd` or `bash`.
+   */
+  readonly shell?: string;
   /** Whether path comparison ignores case. */
   readonly caseInsensitivePaths?: boolean;
   /**
@@ -87,6 +93,7 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => (
   platform: options.platform ?? process.platform,
   caseInsensitivePaths:
     options.caseInsensitivePaths ?? process.platform === "win32",
+  ...(options.shell === undefined ? {} : { shell: options.shell }),
   guard: options.guard,
   ...(options.signal === undefined ? {} : { signal: options.signal }),
   ...(options.askUser === undefined ? {} : { askUser: options.askUser }),

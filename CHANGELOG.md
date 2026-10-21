@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The documented hook events never happened.** `session_start`,
+  `user_prompt_submit` and `session_end` were declared, documented and
+  never fired — only the three tool events were. All six fire now, and a
+  documentation test fails the build if an event is documented but never
+  used.
+- **The `shell` setting did nothing.** The README told Windows users to set
+  `"shell": "cmd"` or `"shell": "bash"`, and the configuration was read and
+  then ignored: every command ran in the platform's default shell. The
+  setting is honoured now.
+
 - **A session log kept everything, and everybody could read it.** The log
   was created with mode `0644` inside a directory of mode `0755`, and it
   held the conversation verbatim — so a key that reached the conversation
@@ -74,6 +84,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is never sent to an endpoint the user's own configuration did not choose.
 
 ### Changed
+
+- **The README says what the shell is not.** The file tools are confined to
+  the workspace; the shell is not. A command is asked about, not confined,
+  unless the operating-system sandbox is switched on — and it is off by
+  default.
 
 - **The built-CLI test is given room to start.** It spawns a fresh node
   process, which loads the whole dependency graph, and on a busy machine that

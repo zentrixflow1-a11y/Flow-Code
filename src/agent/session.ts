@@ -27,7 +27,7 @@ import { connectAll, type McpConnections } from "../mcp/client.js";
 import { bridgeTools } from "../mcp/bridge.js";
 import { readAgentDefinitions, type AgentDefinition } from "../agents/definitions.js";
 import { runSubAgent } from "../agents/subagent.js";
-import { readHooks, type HookDefinition } from "../hooks/runner.js";
+import { readHooks, runEventHooks, type HookDefinition } from "../hooks/runner.js";
 import { detectSandbox, type SandboxKind } from "../security/sandbox.js";
 import {
   resolveWorkspaceTrust,
@@ -273,6 +273,33 @@ export class FlowSession {
       session.hooks = hooks.value;
     }
 
+    // The session has started, so the hooks that watch for that are told.
+    // A hook that refuses stops the session here, before any tool has run.
+    const started = await runEventHooks(
+      session.hooks,
+      "session_start",
+      { cwd: options.cwd, sessionId },
+      { cwd: options.cwd, env },
+    );
+    if (started.blocked !== undefined) {
+      await log.append({
+        type: "error",
+        data: { message: started.blocked },
+      });
+      await log.close();
+      return err(
+        flowError("permission_denied", started.blocked, {
+          retryable: false,
+          remediation: "A hook refused to let the session start.",
+        }),
+      );
+    }
+    if (started.context !== undefined) {
+      session.#mcpInstructions = [started.context, session.#mcpInstructions]
+        .filter((text): text is string => text !== undefined)
+        .join("\n\n");
+    }
+
     if (config.security.sandbox === "auto") {
       const support = await detectSandbox(process.platform);
       if (support.available) {
@@ -318,6 +345,7 @@ export class FlowSession {
       secrets,
       platform: process.platform,
       caseInsensitivePaths: process.platform === "win32",
+      ...(this.config.shell === undefined ? {} : { shell: this.config.shell }),
       registry: this.registry,
       guard: this.#guard,
       ...(this.#sandbox === undefined ? {} : { sandbox: this.#sandbox }),
@@ -626,6 +654,27 @@ export class FlowSession {
 
   /** Close the session. */
   async close(): Promise<void> {
+    // The session is ending, so the hooks that watch for that are told.
+    // Nothing can be blocked at this point, so what they say is recorded.
+    const ended = await runEventHooks(
+      this.hooks,
+      "session_end",
+      { cwd: this.cwd },
+      { cwd: this.cwd, env: this.#env },
+    );
+    if (ended.context !== undefined) {
+      await this.log.append({
+        type: "note",
+        data: { text: ended.context },
+      });
+    }
+    if (ended.failures !== undefined && ended.failures.length > 0) {
+      await this.log.append({
+        type: "error",
+        data: { message: `A session_end hook failed: ${ended.failures.join("; ")}` },
+      });
+    }
+
     await this.mcp.close();
     await this.log.close();
   }

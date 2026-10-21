@@ -40,6 +40,13 @@ export interface ToolContext {
   readonly redact: (text: string) => string;
   /** The host platform. */
   readonly platform: NodeJS.Platform;
+  /**
+   * The shell commands run in, when the user asked for one.
+   *
+   * `powershell`, `cmd` or `bash`; without it, the platform's own shell is
+   * used.
+   */
+  readonly shell?: string;
   /** Whether path comparison ignores case. */
   readonly caseInsensitivePaths: boolean;
   /** Put a question to the user and wait for the answer. */

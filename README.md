@@ -90,7 +90,7 @@ Flow Code is young and honest about it. What works today:
 | Setup wizard and `flowcode doctor` | Working |
 | MCP client, sub-agents, hooks | Working |
 | Workspace trust for a project's own files | Working |
-| Operating-system sandbox | Opt-in; macOS and Linux only |
+| Operating-system sandbox | Opt-in; **off by default**; macOS and Linux only |
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the detail, and
 [`PLAN.md`](./PLAN.md) for the design.
@@ -488,6 +488,36 @@ inside the tool itself, so a mistake in one layer is caught by the other.
 to the workspace and any directory you have explicitly opened, and symlinks
 cannot be used to step outside it.
 
+### What the shell is not confined to
+
+**The file tools are confined. The shell is not.**
+
+`read_file`, `write_file`, `edit_file`, `list_dir`, `glob_files` and
+`grep_files` resolve every path and refuse anything outside the workspace.
+That is a real boundary, and it holds in every mode.
+
+`run_command` is not. It runs a command in a shell, and a command can reach
+anywhere the user can — `cat /etc/passwd`, `curl https://example.com`,
+`rm -rf ~`. The permission engine asks first, in every mode except `trust`,
+and the read-only shortcut lets a few harmless commands through without
+asking. That is a prompt, not a boundary.
+
+The boundary for a command is the operating-system sandbox, and **it is off
+by default**:
+
+```json
+{ "security": { "sandbox": "auto" } }
+```
+
+With `"auto"`, commands run inside macOS's Seatbelt or Linux's bubblewrap,
+where writes outside the workspace are refused by the operating system
+itself. There is no sandbox for native Windows — run Flow Code inside WSL2
+to get one — and on macOS and Linux the sandbox is only used when one is
+actually installed.
+
+So: the honest summary is that a command is *asked about*, not *confined*,
+unless you turn the sandbox on.
+
 ### What is never read
 
 The same list of files, and a few more: `.npmrc`, `.netrc`,
@@ -631,8 +661,8 @@ as JSON on standard input.
 
 | Event | When it runs |
 | --- | --- |
-| `session_start` | The session started |
-| `user_prompt_submit` | You sent a message |
+| `session_start` | The session started, before any tool has run |
+| `user_prompt_submit` | You sent a message, before the model sees it |
 | `pre_tool_use` | A tool is about to run |
 | `post_tool_use` | A tool finished successfully |
 | `post_tool_use_failure` | A tool failed |
@@ -642,9 +672,20 @@ as JSON on standard input.
   `{"additional_context": "..."}`, that text is passed to the model.
 - **Exit code 2** Ã¢â‚¬â€ block the action. The hook's standard error becomes the
   reason, and the model is told.
-- **Anything else** Ã¢â‚¬â€ carry on. A hook that fails is not a broken session.
+- **Anything else** Ã¢â‚¬â€ the hook has not approved anything, so it blocks in the
+  same way. A hook that cannot run fails closed, rather than quietly
+  allowing what it was meant to stop.
 
-The `matcher` is a regular expression matched against the tool's name.
+Only some of the events can be blocked. `session_start`, `user_prompt_submit`
+and `pre_tool_use` stop the session, the prompt and the tool respectively; a
+failure after the fact — `post_tool_use`, `post_tool_use_failure`,
+`session_end` — is reported instead, because the action has already happened.
+
+The `matcher` is a regular expression matched against the tool's name. It only
+applies to the tool events.
+
+A project's `hooks.json` is only read once you have trusted the directory.
+See [Trusting a project](#trusting-a-project).
 
 ---
 

@@ -184,6 +184,95 @@ export const hookApplies = (hook: HookDefinition, toolName: string): boolean => 
   }
 };
 
+/**
+ * The events whose hooks can stop what is happening.
+ *
+ * A hook that fails at one of these has not approved anything, so it
+ * blocks: the session does not start, the prompt is not accepted, or the
+ * tool does not run.
+ */
+export const BLOCKING_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+]);
+
+/** What a set of hooks had to say. */
+export interface HookReport {
+  /** The reason a hook blocked the action. */
+  readonly blocked?: string;
+  /** The context a hook asked to pass to the model. */
+  readonly context?: string;
+  /** The hooks that failed, when the event could not be blocked. */
+  readonly failures?: readonly string[];
+}
+
+/**
+ * Run the hooks for an event.
+ *
+ * The first hook that blocks gives the reason, and the rest still run: a
+ * hook that stops an action does not get to silence the others.
+ *
+ * A matcher names a tool, so it is only used for the events that have one.
+ *
+ * @param hooks - The configured hooks.
+ * @param event - The event that happened.
+ * @param payload - What the hook is told.
+ * @param options - Where to run them.
+ */
+export const runEventHooks = async (
+  hooks: readonly HookDefinition[],
+  event: HookEvent,
+  payload: Readonly<Record<string, unknown>>,
+  options: {
+    readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv;
+  },
+): Promise<HookReport> => {
+  let blocked: string | undefined;
+  const contexts: string[] = [];
+  const failures: string[] = [];
+
+  for (const hook of hooks) {
+    if (hook.event !== event) {
+      continue;
+    }
+
+    const tool = payload["tool"];
+    if (typeof tool === "string" && !hookApplies(hook, tool)) {
+      continue;
+    }
+
+    const outcome = await runHook(
+      hook,
+      { event, ...payload },
+      { cwd: options.cwd, env: options.env },
+    );
+
+    if (!outcome.ok) {
+      if (BLOCKING_HOOK_EVENTS.has(event)) {
+        blocked = outcome.reason;
+        continue;
+      }
+      // The action has already happened, so a hook that failed afterwards is
+      // reported rather than blocking anything.
+      failures.push(outcome.reason);
+      contexts.push(`A hook failed: ${outcome.reason}`);
+      continue;
+    }
+
+    if (outcome.context !== undefined) {
+      contexts.push(outcome.context);
+    }
+  }
+
+  return {
+    ...(blocked === undefined ? {} : { blocked }),
+    ...(contexts.length === 0 ? {} : { context: contexts.join("\n") }),
+    ...(failures.length === 0 ? {} : { failures }),
+  };
+};
+
 /** What a hook said. */
 export type HookOutcome =
   /** The hook did not object. */

@@ -22,7 +22,7 @@ import { assembleRequest } from "../context/assembler.js";
 import { buildSystemPrompt } from "../context/system-prompt.js";
 import { decidePermission } from "../permissions/engine.js";
 import { isReadOnlyCommand } from "../permissions/modes.js";
-import { hookApplies, runHook } from "../hooks/runner.js";
+import { runEventHooks } from "../hooks/runner.js";
 import { parseRule } from "../permissions/rules.js";
 import type { PermissionRequest } from "../permissions/types.js";
 import type { ChatMessage, ToolCall } from "../providers/types.js";
@@ -50,7 +50,35 @@ export const runAgent = async (
   let turns = 0;
   let text = "";
 
+  let hookContext: string | undefined;
+
   if (prompt !== undefined && prompt !== "") {
+    // A hook may refuse the prompt, and what it says is passed to the model.
+    const submitted = await runEventHooks(
+      options.hooks ?? [],
+      "user_prompt_submit",
+      { prompt, cwd: options.toolContext.cwd },
+      { cwd: options.toolContext.cwd, env: options.toolContext.env },
+    );
+
+    if (submitted.blocked !== undefined) {
+      const error = flowError(
+        "permission_denied",
+        submitted.blocked,
+        {
+          retryable: false,
+          remediation: "A hook refused the prompt. Tell the user what it said.",
+        },
+      );
+      await options.session.append({
+        type: "error",
+        data: { message: error.message },
+      });
+      return { reason: "error", turns, text, error };
+    }
+
+    hookContext = submitted.context;
+
     await options.session.append({ type: "user.message", data: { text: prompt } });
   }
 
@@ -66,7 +94,7 @@ export const runAgent = async (
     turns += 1;
     await options.session.append({ type: "turn.start", data: { turn: turns } });
 
-    const request = buildRequest(options);
+    const request = buildRequest(options, hookContext);
 
     const calls: ToolCall[] = [];
     let turnText = "";
@@ -142,8 +170,9 @@ export const runAgent = async (
  * Build the request for one turn.
  *
  * @param options - Everything the agent needs.
+ * @param hookContext - What a hook said when the prompt was submitted.
  */
-export const buildRequest = (options: AgentOptions) => {
+export const buildRequest = (options: AgentOptions, hookContext?: string) => {
   const messages: ChatMessage[] = deriveMessages(options.session.events);
   const denied = deniedTools(options.rules);
   const advertised = options.registry.advertised(denied);
@@ -167,13 +196,18 @@ export const buildRequest = (options: AgentOptions) => {
     additionalDirectories: options.config.permissions.additionalDirectories,
   });
 
+  const instructions = [
+    options.extraInstructions,
+    hookContext,
+  ]
+    .filter((text): text is string => text !== undefined && text !== "")
+    .join("\n\n");
+
   return assembleRequest({
     model: options.config.provider.model ?? "",
     messages,
     systemPrompt,
-    ...(options.extraInstructions === undefined
-      ? {}
-      : { projectInstructions: options.extraInstructions }),
+    ...(instructions === "" ? {} : { projectInstructions: instructions }),
     tools: tools.filter((tool) => allowed.has(tool.name)),
   });
 };
@@ -315,7 +349,6 @@ const runToolCall = async (
     call,
     result,
   );
-
   // Whatever a hook had to say is passed back to the model with the result.
   const notes = [before.context, after.context].filter(
     (note): note is string => note !== undefined && note !== "",
@@ -351,7 +384,7 @@ interface HookReport {
 }
 
 /**
- * Run the hooks for an event.
+ * Run the hooks for a tool event.
  *
  * @param options - Everything the agent needs.
  * @param event - The event.
@@ -369,50 +402,19 @@ const runHooks = async (
     return {};
   }
 
-  let blocked: string | undefined;
-  const contexts: string[] = [];
-
-  for (const hook of options.hooks) {
-    if (hook.event !== event) {
-      continue;
-    }
-    if (!hookApplies(hook, call.name)) {
-      continue;
-    }
-
-    const outcome = await runHook(
-      hook,
-      {
-        event,
-        tool: call.name,
-        arguments: call.args,
-        ...(result === undefined
-          ? {}
-          : { result: result.ok ? result.output : result.error.message }),
-        cwd: options.toolContext.cwd,
-      },
-      { cwd: options.toolContext.cwd, env: options.toolContext.env },
-    );
-
-    if (!outcome.ok) {
-      if (event === "pre_tool_use") {
-        blocked = outcome.reason;
-        continue;
-      }
-      // The action has already happened, so a hook that failed afterwards is
-      // reported to the model rather than blocking anything.
-      contexts.push(`A hook failed: ${outcome.reason}`);
-      continue;
-    }
-    if (outcome.context !== undefined) {
-      contexts.push(outcome.context);
-    }
-  }
-
-  return {
-    ...(blocked === undefined ? {} : { blocked }),
-    ...(contexts.length === 0 ? {} : { context: contexts.join("\n") }),
-  };
+  return runEventHooks(
+    options.hooks,
+    event,
+    {
+      tool: call.name,
+      arguments: call.args,
+      ...(result === undefined
+        ? {}
+        : { result: result.ok ? result.output : result.error.message }),
+      cwd: options.toolContext.cwd,
+    },
+    { cwd: options.toolContext.cwd, env: options.toolContext.env },
+  );
 };
 
 /** Write a tool result to the session and report it. */
