@@ -327,8 +327,16 @@ export const namesSecret = (word: string): boolean => {
       return true;
     }
 
-    if (isGlob(base) && SECRET_NAMES.some((name) => matchGlob(base, name))) {
-      return true;
+    if (isGlob(base)) {
+      // The comparison ignores case, because a filesystem may too: `*ENV*`
+      // reads `.env` on Windows and on macOS.
+      const lower = base.toLowerCase();
+      const matched = SECRET_NAMES.some(
+        (name) => matchGlob(base, name) || matchGlob(lower, name.toLowerCase()),
+      );
+      if (matched) {
+        return true;
+      }
     }
   }
 

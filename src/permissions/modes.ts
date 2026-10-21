@@ -174,6 +174,31 @@ export const UNSAFE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * The flags that make a search recurse over a tree.
+ *
+ * A recursive search reaches every file under a directory, including the
+ * ones whose names say they hold a credential, so it is not read-only.
+ */
+export const RECURSIVE_FLAGS: readonly string[] = [
+  "-r",
+  "-R",
+  "--recursive",
+  "--dir-recurse",
+];
+
+/**
+ * The flags that make a search reach files the user did not name.
+ */
+export const WIDENING_FLAGS: readonly string[] = [
+  "-g",
+  "--glob",
+  "--files",
+  "--hidden",
+  "--no-ignore",
+  "-uu",
+];
+
+/**
  * The environment variables that may be set before a read-only command.
  *
  * Anything else — `PATH` above all — decides which program runs, so it is
@@ -303,7 +328,69 @@ const isReadOnlySegment = (
     return false;
   }
 
+  if (!isReadOnlySearch(name, arguments_)) {
+    return false;
+  }
+
   return !arguments_.some((argument) => touchesASecret(argument));
+};
+
+/**
+ * Whether a search only reads the files it was given.
+ *
+ * A recursive search walks a tree, and a tree holds files whose names say
+ * they hold a credential — a search for an ordinary word can print one of
+ * them. So a search is read-only only when it reads the files that were
+ * named, and not the tree around them.
+ *
+ * @param program - The search program.
+ * @param arguments_ - Its arguments.
+ */
+const isReadOnlySearch = (
+  program: string,
+  arguments_: readonly string[],
+): boolean => {
+  if (program === "grep" || program === "egrep" || program === "fgrep") {
+    // Without a recursive flag, grep reads the files it is given and says
+    // nothing about a directory.
+    return !arguments_.some((argument) => RECURSIVE_FLAGS.includes(argument));
+  }
+
+  if (program === "rg") {
+    // ripgrep recurses by default, so it only reads what it was given.
+    if (
+      arguments_.some(
+        (argument) =>
+          WIDENING_FLAGS.includes(argument) || argument.startsWith("--glob="),
+      )
+    ) {
+      return false;
+    }
+
+    const words = arguments_.filter((argument) => !argument.startsWith("-"));
+    const [, ...paths] = words;
+    if (paths.length === 0) {
+      // It searches the working directory.
+      return false;
+    }
+    return paths.every((path) => looksLikeFile(path));
+  }
+
+  return true;
+};
+
+/**
+ * Whether a path looks like a file rather than a directory.
+ *
+ * A name with an extension is a file; a name without one is usually a
+ * directory.
+ *
+ * @param path - The path to test.
+ */
+const looksLikeFile = (path: string): boolean => {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && dot < name.length - 1;
 };
 
 /**

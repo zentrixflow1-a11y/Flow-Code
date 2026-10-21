@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writes one too. Those options are refused now, and a program is no longer
   accepted just because its name looks like an allowed one: `/tmp/evil/ls`
   is not `ls`.
+- **A search that walks a tree could print a credential file.** `grep -r foo
+  .` and `rg SECRET` reach every file under a directory, including the ones
+  whose names say they hold a credential, and a search for an ordinary word
+  can print one of them. A search is now only auto-approved when it reads
+  the files it was given. `grep -r foo src` asks.
 - **A sub-agent ran without the project's hooks.** A `pre_tool_use` hook that
   guarded a tool guarded the agent that spawned it and not the sub-agent.
   Both run the same hooks now.

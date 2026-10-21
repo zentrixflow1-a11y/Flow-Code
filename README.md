@@ -457,10 +457,16 @@ points at a file that holds a credential. Anything else asks.
 | Command | Allowed |
 | --- | --- |
 | `ls`, `dir`, `pwd`, `echo` | Yes |
-| `cat`, `head`, `tail`, `type`, `grep`, `rg`, `find`, `fd`, `wc`, `stat`, `file`, `tree`, `diff` | Yes, unless an argument points at a credential file |
+| `cat`, `head`, `tail`, `type`, `wc`, `stat`, `file`, `tree`, `diff` | Yes, unless an argument points at a credential file |
+| `grep`, `rg` | Yes, when they read the files they are given. A search that walks a tree asks, because a tree holds files whose names say they hold a credential |
+| `find`, `fd` | Yes, unless an argument points at a credential file or the command may run another program |
 | `git status`, `git log`, `git diff`, `git show`, `git rev-parse`, `git ls-files`, `git blame` | Yes, unless the arguments change the configuration or write a file |
 | `env`, `printenv` | No — they print the environment, which is where the keys are |
 | `node`, `python`, `npm` | No — running a program is not reading |
+
+A pattern that could reach a credential file counts as naming one: `cat .e*`
+reads `.env`, so it asks. The same goes for a pattern the matcher cannot
+reason about, such as `.[a-z]*` or `{,.}env`.
 
 On Windows the shell is PowerShell, where `cat` and `find` mean something
 else, so only `ls`, `dir`, `pwd`, `echo` and the read-only `git` subcommands

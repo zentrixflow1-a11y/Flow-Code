@@ -57,8 +57,18 @@ describe("isReadOnlyCommand", () => {
     expect(isReadOnlyCommand("ls", "linux")).toBe(true);
     expect(isReadOnlyCommand("ls -la", "linux")).toBe(true);
     expect(isReadOnlyCommand("cat package.json", "linux")).toBe(true);
-    expect(isReadOnlyCommand("grep -r foo src", "linux")).toBe(true);
+    expect(isReadOnlyCommand("grep foo README.md", "linux")).toBe(true);
     expect(isReadOnlyCommand("pwd", "linux")).toBe(true);
+  });
+
+  it("is not read-only when a search walks a tree", () => {
+    // A recursive search reaches every file under a directory, including the
+    // ones whose names say they hold a credential.
+    expect(isReadOnlyCommand("grep -r foo src", "linux")).toBe(false);
+    expect(isReadOnlyCommand("grep -R foo src", "linux")).toBe(false);
+    expect(isReadOnlyCommand("rg foo", "linux")).toBe(false);
+    expect(isReadOnlyCommand("rg foo src", "linux")).toBe(false);
+    expect(isReadOnlyCommand("rg foo src/index.ts", "linux")).toBe(true);
   });
 
   it("recognises read-only git subcommands", () => {
@@ -224,7 +234,7 @@ describe("a command that reads a secret", () => {
   });
 
   it("takes a quoted argument as one argument", () => {
-    expect(isReadOnlyCommand("grep -r 'a b' src", "linux")).toBe(true);
+    expect(isReadOnlyCommand("grep 'a b' src", "linux")).toBe(true);
     expect(isReadOnlyCommand("cat 'my file.txt'", "linux")).toBe(true);
   });
 });
