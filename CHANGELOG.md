@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The punctuation in the documents was mis-decoded.** The README, the
+  changelog, the contributing guide, the package description and two source
+  files were written through a lossy encoding step, so an em dash read as
+  three characters and a bullet as six. They are saved as UTF-8 now, and a
+  test fails the build if a tracked file holds mis-decoded punctuation
+  again.
+- **The interface compared against the wrong character.** The `@`-file
+  completion filtered the truncation line by comparing it with the mis-decoded
+  form of an ellipsis, so it never matched, and the line
+  `… and 12 more` appeared in the file suggestions.
 - **The documented hook events never happened.** `session_start`,
   `user_prompt_submit` and `session_end` were declared, documented and
   never fired — only the three tool events were. All six fire now, and a
@@ -112,7 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The tool-schema budget** (`src/tools/budget.ts`): the tool schemas are
   measured before they are sent, and the least important ones are left out
-  when they are too large â€” with a message saying which ones and how to allow
+  when they are too large — with a message saying which ones and how to allow
   them.
 - **The optional operating-system sandbox** (`src/security/sandbox.ts`):
   macOS's Seatbelt and Linux's bubblewrap, detected rather than assumed, and
@@ -192,7 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plan's `fs.promises.glob` fallback is kept regardless, so the tool works
   the same way on every supported version.
 
-## [0.6.0] â€” M6 (MCP client, sub-agents, hooks)
+## [0.6.0] — M6 (MCP client, sub-agents, hooks)
 
 ### Added
 
@@ -206,9 +216,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sub-agents** (`src/agents/`): `.flowcode/agents/*.md` with a small
   frontmatter block. A sub-agent runs in its own context with its own tools
   and its own session log, and the parent sees only its final answer.
-- **Hooks** (`src/hooks/`): six events â€” `session_start`,
+- **Hooks** (`src/hooks/`): six events — `session_start`,
   `user_prompt_submit`, `pre_tool_use`, `post_tool_use`,
-  `post_tool_use_failure`, `session_end` â€” with a small protocol. The hook
+  `post_tool_use_failure`, `session_end` — with a small protocol. The hook
   receives the event as JSON on standard input; exit code zero lets the
   action proceed and may add context for the model; exit code two blocks it
   and the standard error becomes the reason.
@@ -225,7 +235,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outcomes, and the context a hook adds is passed to the model with the tool
   result.
 
-## [0.5.0] â€” M5 (Terminal interface, setup wizard, doctor)
+## [0.5.0] — M5 (Terminal interface, setup wizard, doctor)
 
 ### Added
 
@@ -234,7 +244,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt, a plan panel, a status line, and an input box with history,
   slash-command completion and `@` file completion.
 - **The interface state** (`src/ui/state.ts`): a plain observable store, so
-  that the agent loop â€” which runs outside React â€” can push updates into the
+  that the agent loop — which runs outside React — can push updates into the
   interface, and so that the model's text is buffered and drawn at a fixed
   rate instead of on every token.
 - **The setup wizard** (`flowcode setup`): finds the model servers running on
@@ -257,11 +267,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that it can be tested in CI on every platform. A pty is a native module and
   would have made the test suite depend on one.
 
-## [0.4.0] â€” M4 (Agent loop, commands, headless mode)
+## [0.4.0] — M4 (Agent loop, commands, headless mode)
 
 ### Added
 
-- **The agent loop** (`src/agent/loop.ts`): turn â†’ model â†’ tools â†’ repeat, with
+- **The agent loop** (`src/agent/loop.ts`): turn ’ model ’ tools ’ repeat, with
   cancellation, a turn limit, and a batch that contains a tool which is not
   concurrency-safe running entirely in order.
 - **The session object** (`src/agent/session.ts`): owns the configuration, the
@@ -292,7 +302,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was added because plan mode is a mode the permission engine already
   enforces.
 
-## [0.3.0] â€” M2 (Tool system and permission engine)
+## [0.3.0] — M2 (Tool system and permission engine)
 
 ### Added
 
@@ -336,7 +346,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The search tools walk the tree themselves instead of shelling out to `rg` or
   `find`, so the harness does not depend on a search binary being installed.
 
-## [0.2.0] â€” M1 (Provider layer)
+## [0.2.0] — M1 (Provider layer)
 
 ### Added
 
@@ -348,7 +358,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Anthropic Messages adapter** (`src/providers/anthropic.ts`) for the
   `anthropic` preset.
 - **Compatibility flags** (`src/providers/compat.ts`): `developerRole`,
-  `maxTokensField`, `strictToolSchema`, `parallelToolCalls`, `toolResultRole` â€”
+  `maxTokensField`, `strictToolSchema`, `parallelToolCalls`, `toolResultRole` —
   the small differences between servers, expressed as configuration instead of
   forked code paths.
 - **Provider presets** (`src/providers/presets.ts`): thirteen built-ins, four of
@@ -379,12 +389,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The provider layer was implemented with **Zod 4.6** and **TypeScript 7**,
   newer than the versions named in `PLAN.md`.
 
-## [0.1.0] â€” M0 (Foundations)
+## [0.1.0] — M0 (Foundations)
 
 ### Added
 
 - Project scaffold: strict TypeScript (`NodeNext` ESM), Vitest, CI matrix
-  (Node 20/22/24 Ã— ubuntu/macos/windows).
+  (Node 20/22/24 × ubuntu/macos/windows).
 - MIT `LICENSE` and a `NOTICE` recording the clean-room process and the
   third-party dependency inventory.
 - Hand-designed logo assets in `assets/`: `logo.svg` (full lockup),
@@ -395,7 +405,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes and deviations from `PLAN.md`
 
-- **npm package name.** `PLAN.md` Â§12 asked whether to publish as `flowcode`.
+- **npm package name.** `PLAN.md` §12 asked whether to publish as `flowcode`.
   The `flowcode` name on npm is already taken by an unrelated project
   ("Tools for building dataflow graphs"), so the package is published as
   **`flow-code-cli`** and the executable stays **`flowcode`**, per the review

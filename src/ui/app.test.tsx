@@ -24,7 +24,7 @@ const fakeTerminal = (): {
 
   const stdout = {
     // The callback is called, because Ink uses it to know that a write has
-    // been flushed â€” the exit promise is resolved from it.
+    // been flushed — the exit promise is resolved from it.
     write: (text: string, callback?: () => void): boolean => {
       output += text;
       callback?.();

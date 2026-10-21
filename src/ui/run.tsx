@@ -170,7 +170,7 @@ const suggestFiles = async (
 
   return result.output
     .split("\n")
-    .filter((line) => line !== "" && !line.startsWith("(") && !line.startsWith("â€¦"))
+    .filter((line) => line !== "" && !line.startsWith("(") && !line.startsWith("…"))
     .map((line) => toPosix(line));
 };
 

@@ -4,6 +4,7 @@
  * A command or a tool that is not documented is a command nobody can find, so
  * this test fails when the two drift apart.
  */
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -108,6 +109,64 @@ describe("the hook events", () => {
     }
   });
 });
+
+describe("the tracked files", () => {
+  it("hold no mis-decoded punctuation", () => {
+    // The patterns below are what an em dash and a bullet look like when
+    // UTF-8 is read as something else. A file that has them was written
+    // through a lossy encoding step, and the reader sees nonsense.
+    //
+    // The patterns are written as escapes, so this file does not contain
+    // them either.
+    const patterns = ["\u00E2\u20AC", "\u00C3\u00A2"];
+
+    for (const file of trackedFiles()) {
+      const text = readFileSync(file, "utf8");
+      for (const pattern of patterns) {
+        expect(text.includes(pattern), `${file} contains ${JSON.stringify(pattern)}`).toBe(
+          false,
+        );
+      }
+    }
+  });
+});
+
+/**
+ * The files the repository keeps.
+ *
+ * Git is asked, because that is what "tracked" means. Without git, the tree
+ * is walked instead, so the check still runs.
+ */
+const trackedFiles = (): readonly string[] => {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+
+  try {
+    const listed = execFileSync("git", ["ls-files"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    return listed.split("\n").filter((entry) => entry !== "");
+  } catch {
+    const files: string[] = [];
+
+    const walk = (directory: string): void => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (entry.name === ".git" || entry.name === "node_modules") {
+          continue;
+        }
+        const path = `${directory}/${entry.name}`;
+        if (entry.isDirectory()) {
+          walk(path);
+          continue;
+        }
+        files.push(path.slice(root.length));
+      }
+    };
+
+    walk(root);
+    return files;
+  }
+};
 
 describe("the NOTICE", () => {
   const notice = readFileSync(
