@@ -18,10 +18,16 @@ import {
 import { dirname, join, relative } from "node:path";
 import { z } from "zod";
 import { flowError, type FlowError } from "../errors.js";
-import { isProtectedPath, resolveWithinRoots, toPosix } from "../util/paths.js";
+import {
+  isProtectedPath,
+  isSensitivePath,
+  resolveWithinRoots,
+  toPosix,
+} from "../util/paths.js";
 import { ok, type Result } from "../util/result.js";
 import { withLineNumbers } from "../util/text.js";
 import { applyGuard } from "./guard.js";
+import { refuseSensitivePath } from "./sensitive.js";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types.js";
 
 /** The largest file the tools will read as text. */
@@ -124,6 +130,12 @@ export const readFileTool: ToolDefinition<z.infer<typeof readFileArgs>> = {
           remediation: "Use list_dir to see what is inside it.",
         }),
       };
+    }
+
+    // A file that holds a credential is not read, whichever tool asked for
+    // it. The rule is about the path, not about the caller.
+    if (isSensitivePath(path)) {
+      return { ok: false, error: refuseSensitivePath(path) };
     }
     if (info.size > MAX_READ_BYTES) {
       return {
@@ -365,6 +377,11 @@ export const listDirTool: ToolDefinition<z.infer<typeof listDirArgs>> = {
 
       for (const entry of sorted) {
         const full = join(directory, entry.name);
+        // A credential file is not listed either: knowing that it is there
+        // is the first half of finding it.
+        if (isSensitivePath(full)) {
+          continue;
+        }
         const info = await stat(full).catch(() => undefined);
         const size = info?.isDirectory() === true ? "" : ` ${info?.size ?? 0} B`;
         entries.push(

@@ -10,8 +10,9 @@ import { join, relative, sep } from "node:path";
 import { z } from "zod";
 import { flowError } from "../errors.js";
 import { matchPath } from "../util/glob.js";
-import { toPosix } from "../util/paths.js";
+import { isSensitivePath, toPosix } from "../util/paths.js";
 import { resolveToolPath } from "./fs.js";
+import { refuseSensitivePath } from "./sensitive.js";
 import type { ToolDefinition, ToolResult } from "./types.js";
 
 /** Directories that are never searched. */
@@ -139,6 +140,8 @@ export const globFilesTool: ToolDefinition<z.infer<typeof globFilesArgs>> = {
         absolute: file,
         relative: toPosix(relative(root, file)),
       }))
+      // A credential file is not offered to the model, even as a name.
+      .filter((entry) => !isSensitivePath(entry.absolute))
       .filter((entry) => matchPath(args.pattern, entry.relative))
       .sort((left, right) => left.relative.localeCompare(right.relative));
 
@@ -237,6 +240,11 @@ export const grepFilesTool: ToolDefinition<z.infer<typeof grepFilesArgs>> = {
     const limit = args.max_results ?? DEFAULT_MAX_RESULTS;
     const mode = args.output_mode ?? "content";
 
+    // Searching a credential file is reading it.
+    if (isSensitivePath(root)) {
+      return { ok: false, error: refuseSensitivePath(root) };
+    }
+
     const info = await stat(root).catch(() => undefined);
     if (info === undefined) {
       return {
@@ -261,6 +269,11 @@ export const grepFilesTool: ToolDefinition<z.infer<typeof grepFilesArgs>> = {
     for (const file of files) {
       if (truncated) {
         break;
+      }
+      // A credential file is not searched, so its contents can never reach
+      // the model through a search either.
+      if (isSensitivePath(file)) {
+        continue;
       }
       const fileInfo = await stat(file).catch(() => undefined);
       if (fileInfo === undefined || fileInfo.size > MAX_SEARCHABLE_BYTES) {

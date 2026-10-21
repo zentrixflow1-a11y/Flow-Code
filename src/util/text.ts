@@ -98,3 +98,50 @@ export const oneLine = (text: string, maxLength = 120): string => {
   }
   return `${flattened.slice(0, Math.max(0, maxLength - 1))}…`;
 };
+
+/**
+ * Split a command line into its words, taking the quotes into account.
+ *
+ * A quoted word is one word, whatever is inside it, and a word that is only
+ * quotes is an empty argument rather than no argument at all.
+ *
+ * @param command - The command line.
+ */
+export const commandWords = (command: string): string[] => {
+  const words: string[] = [];
+  let current = "";
+  let started = false;
+  let quote: string | undefined;
+
+  for (const character of command) {
+    if (quote !== undefined) {
+      if (character === quote) {
+        quote = undefined;
+        continue;
+      }
+      current += character;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      started = true;
+      continue;
+    }
+    if (character === " " || character === "\t") {
+      if (started) {
+        words.push(current);
+        current = "";
+        started = false;
+      }
+      continue;
+    }
+    current += character;
+    started = true;
+  }
+
+  if (started) {
+    words.push(current);
+  }
+
+  return words;
+};

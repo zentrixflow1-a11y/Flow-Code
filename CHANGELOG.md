@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`isSensitivePath`** (`src/util/paths.ts`): the single answer to "may this
   file be read?". It is a question about the path, not about the tool that
   asks it, so a credential file is a credential file however it is reached.
+  `read_file` refuses it, `grep_files` does not search it, `glob_files` does
+  not offer it, `list_dir` does not list it, and a command that names it is
+  refused.
 
 - **Workspace trust** (`src/security/trust.ts`): a project's own files are
   code — a hook is a command, an MCP server is a program, a configuration file
@@ -22,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ask, so it ignores those files and says so on standard error.
 
 ### Fixed
+
+- **A search could return a credential file.** `read_file` refused to read
+  `.env`, but `grep_files` did not know that, so a search for a common word
+  returned the contents of the file in the middle of its results. The rule is
+  now about the path rather than about the tool, so no tool reads a file
+  whose name says it holds a credential.
 
 - **A command that only looked harmless was run without asking.** The
   read-only shortcut is a gate that lets a command through without a prompt,

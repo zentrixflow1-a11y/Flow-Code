@@ -82,6 +82,25 @@ describe("the shell tool", () => {
     }
   });
 
+  it("refuses a command that names a file that holds a credential", async () => {
+    await workspace.write(".env", "SECRET_TOKEN=hunter2\n");
+
+    const result = await executeTool(
+      runCommandTool,
+      { command: "cat .env" },
+      workspace.context,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("permission_denied");
+      expect(result.error.message).toContain("credential");
+    }
+    if (result.ok) {
+      expect(result.output).not.toContain("hunter2");
+    }
+  });
+
   it("stops a command that runs too long", async () => {
     const result = await executeTool(
       runCommandTool,

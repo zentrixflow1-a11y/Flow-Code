@@ -15,6 +15,7 @@ import { flowError } from "../errors.js";
 import { capOutput } from "../util/text.js";
 import { resolveToolPath } from "./fs.js";
 import { applyGuard } from "./guard.js";
+import { refuseSensitiveCommand, sensitiveWords } from "./sensitive.js";
 import { wrapCommand } from "../security/sandbox.js";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types.js";
 
@@ -103,6 +104,14 @@ export const runCommandTool: ToolDefinition<z.infer<typeof runCommandArgs>> = {
     const guard = applyGuard(context, "execute");
     if (!guard.ok) {
       return { ok: false, error: guard.error };
+    }
+
+    // A command that names a credential file is refused, whatever the
+    // permission rules say. This is best effort — it reads the words of the
+    // command, not what the shell will make of them.
+    const secrets = sensitiveWords(args.command);
+    if (secrets.length > 0) {
+      return { ok: false, error: refuseSensitiveCommand(secrets) };
     }
 
     const resolved = await resolveToolPath(args.cwd ?? ".", context);

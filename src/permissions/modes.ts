@@ -8,6 +8,7 @@
  */
 import type { PermissionMode, ToolCategory } from "./types.js";
 import { isSensitivePath } from "../util/paths.js";
+import { commandWords } from "../util/text.js";
 
 /** How a mode treats a tool category when no rule applies. */
 export type CategoryOutcome = "allow" | "ask" | "deny";
@@ -286,45 +287,7 @@ const splitCommand = (command: string): string[] => {
  *
  * A quoted word is one word, whatever is inside it.
  */
-const tokenize = (segment: string): string[] => {
-  const words: string[] = [];
-  let current = "";
-  let started = false;
-  let quote: string | undefined;
-
-  for (const character of segment) {
-    if (quote !== undefined) {
-      if (character === quote) {
-        quote = undefined;
-        continue;
-      }
-      current += character;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      // A quoted word is an argument even when it is empty.
-      started = true;
-      continue;
-    }
-    if (character === " " || character === "\t") {
-      if (started) {
-        words.push(current);
-        current = "";
-        started = false;
-      }
-      continue;
-    }
-    current += character;
-    started = true;
-  }
-
-  if (started) {
-    words.push(current);
-  }
-
-  return words;
-};
+const tokenize = (segment: string): string[] => commandWords(segment);
 
 /** Whether one segment of a command only reads. */
 const isReadOnlySegment = (

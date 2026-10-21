@@ -75,6 +75,19 @@ describe("the search tools", () => {
         expect(result.output).not.toContain("node_modules");
       }
     });
+
+    it("does not offer a file that holds a credential", async () => {
+      await workspace.write(".env", "SECRET=1\n");
+      const result = await executeTool(
+        globFilesTool,
+        { pattern: "**/*" },
+        workspace.context,
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.output).not.toContain(".env");
+      }
+    });
   });
 
   describe("grep_files", () => {
@@ -174,6 +187,37 @@ describe("the search tools", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.output).toContain("No matches");
+      }
+    });
+
+    it("never returns the contents of a file that holds a credential", async () => {
+      await workspace.write(".env", "SECRET_TOKEN=hunter2\n");
+
+      const result = await executeTool(
+        grepFilesTool,
+        { pattern: "SECRET_TOKEN" },
+        workspace.context,
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.output).not.toContain("hunter2");
+        expect(result.output).not.toContain(".env");
+      }
+    });
+
+    it("refuses to search a file that holds a credential", async () => {
+      await workspace.write(".env", "SECRET_TOKEN=hunter2\n");
+
+      const result = await executeTool(
+        grepFilesTool,
+        { pattern: "SECRET_TOKEN", path: ".env" },
+        workspace.context,
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("permission_denied");
       }
     });
   });

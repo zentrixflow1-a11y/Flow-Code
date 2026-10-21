@@ -488,6 +488,21 @@ inside the tool itself, so a mistake in one layer is caught by the other.
 to the workspace and any directory you have explicitly opened, and symlinks
 cannot be used to step outside it.
 
+### What is never read
+
+The same list of files, and a few more: `.npmrc`, `.netrc`,
+`.git-credentials`, `credentials.json`, `secrets.yaml` and anything else
+whose name says it holds a credential.
+
+The rule is about the **path**, not about the tool. A credential file is not
+read by `read_file`, it is not returned by `grep_files`, it is not listed by
+`list_dir`, it is not offered by `glob_files`, and a command that names it is
+refused. There is no way around it by asking for it in a different way.
+
+That is a safety net, not a boundary: it recognises the names it knows. A
+secret in a file called `notes.txt` is still a secret, and the redactor is
+what catches that one.
+
 ### Approving a tool
 
 When a tool needs your approval, Flow Code shows you what it wants to do and

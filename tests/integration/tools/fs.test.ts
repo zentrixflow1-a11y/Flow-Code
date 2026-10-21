@@ -82,6 +82,22 @@ describe("the filesystem tools", () => {
         expect(result.error.code).toBe("invalid_request");
       }
     });
+
+    it("refuses to read a file that holds a credential", async () => {
+      const result = await executeTool(
+        readFileTool,
+        { path: "config/.env" },
+        workspace.context,
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("permission_denied");
+        expect(result.error.message).toContain("credential");
+      }
+      if (result.ok) {
+        expect(result.output).not.toContain("SECRET=1");
+      }
+    });
   });
 
   describe("write_file", () => {
@@ -197,6 +213,18 @@ describe("the filesystem tools", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.output).toContain("index.ts");
+      }
+    });
+
+    it("does not list a file that holds a credential", async () => {
+      const result = await executeTool(
+        listDirTool,
+        { path: "config", depth: 1 },
+        workspace.context,
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.output).not.toContain(".env");
       }
     });
   });
