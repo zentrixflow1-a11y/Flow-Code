@@ -2,7 +2,7 @@
  * The built CLI, as a user runs it.
  */
 import { exec, execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,5 +87,25 @@ describe("the built CLI", () => {
 
   it("exits with a non-zero status for an unknown command", async () => {
     await expect(cli(["nope"], { cwd: workspace })).rejects.toThrow();
+  });
+
+  it("runs when it is reached through a symlink", async () => {
+    // A package installed from npm is run through a symlink in
+    // node_modules/.bin. The command has to recognise itself as the entry
+    // point through that symlink, or it does nothing at all and exits
+    // quietly.
+    const link = join(workspace, "flowcode-link");
+    try {
+      await symlink(cliPath, link, "file");
+    } catch {
+      // Creating a symlink needs a privilege Windows does not grant by
+      // default. The check still runs on the platforms that have it.
+      return;
+    }
+
+    const { stdout } = await run(process.execPath, [link, "--version"], {
+      cwd: workspace,
+    });
+    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 });
