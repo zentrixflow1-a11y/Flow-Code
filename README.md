@@ -468,6 +468,10 @@ A pattern that could reach a credential file counts as naming one: `cat .e*`
 reads `.env`, so it asks. The same goes for a pattern the matcher cannot
 reason about, such as `.[a-z]*` or `{,.}env`.
 
+To search without asking, use the `grep_files` tool rather than the shell's
+`grep`: it skips the files that hold credentials, and it is not a shell
+command at all.
+
 On Windows the shell is PowerShell, where `cat` and `find` mean something
 else, so only `ls`, `dir`, `pwd`, `echo` and the read-only `git` subcommands
 are on the list there.
