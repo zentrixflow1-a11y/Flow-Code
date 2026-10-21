@@ -32,11 +32,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The command did nothing when it was installed from npm.** It compared its
+  own location with the path in `process.argv` to decide whether it was the
+  process's entry point. A package installed from npm is run through a
+  symlink in `node_modules/.bin`, so on Linux and macOS the two never
+  matched: the command printed nothing, did nothing and exited successfully.
+  Both sides are resolved before they are compared now.
 - **A deny rule took a whole tool out of the model's context.** A rule with a
   specifier, such as the built-in `read_file:**/.env`, blocked that one call —
   but it also removed `read_file` from the tools the model was offered, so the
   agent could not read a file at all. Only a rule that names a tool and
   nothing else now removes it.
+- **A hook that could not run was treated as if it had passed.** A hook meant
+  to stop something therefore quietly allowed it. Any non-zero exit is now a
+  refusal, so a broken hook fails closed.
+- **The hook and the shell lost the PATH.** They ran with the session's
+  environment and nothing else, so a session with an empty environment could
+  not find anything to run. The session's environment is now layered over the
+  process's own.
 - **The path sandbox compared a resolved path with an unresolved root.** On
   macOS a temporary directory is reached through `/var`, which is a symlink to
   `/private/var`, so every file in the workspace was refused. Both sides are
