@@ -63,14 +63,19 @@ export const runSubAgent = async (
   }
 
   const directory = await mkdtemp(join(tmpdir(), "flowcode-subagent-"));
-  const log = await SessionLog.create(join(directory, "session.jsonl"), {
-    id: `subagent-${definition.name}`,
-    cwd: options.toolContext.cwd,
-    startedAt: Date.now(),
-    flowCodeVersion: "0.0.0",
-    provider: options.provider.id,
-    model: options.config.provider.model ?? "",
-  });
+  const log = await SessionLog.create(
+    join(directory, "session.jsonl"),
+    {
+      id: `subagent-${definition.name}`,
+      cwd: options.toolContext.cwd,
+      startedAt: Date.now(),
+      flowCodeVersion: "0.0.0",
+      provider: options.provider.id,
+      model: options.config.provider.model ?? "",
+    },
+    // The sub-agent's log is redacted with the same redactor as its tools.
+    { redact: options.toolContext.redact },
+  );
 
   const agentOptions: AgentOptions = {
     provider: options.provider,

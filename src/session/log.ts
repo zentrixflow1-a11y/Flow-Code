@@ -4,11 +4,17 @@
  * Every event is one line of JSON. The log is never rewritten, so a crash
  * can only ever lose the last line — and a lost line is detected and
  * discarded when the log is read back.
+ *
+ * A session log holds everything that happened, which means it may hold
+ * something that should not be kept. Two things protect it: the file is
+ * written for its owner alone, and everything written into it is redacted
+ * first.
  */
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
 import { err, ok, type Result } from "../util/result.js";
+import { identityRedactor, type Redactor } from "../util/redact.js";
 import {
   SESSION_FORMAT_VERSION,
   type SessionEvent,
@@ -16,18 +22,40 @@ import {
   type StoredEvent,
 } from "./types.js";
 
+/** The mode a session log is created with: its owner, and nobody else. */
+export const SESSION_LOG_MODE = 0o600;
+
+/** The mode a session log's directory is created with. */
+export const SESSION_DIRECTORY_MODE = 0o700;
+
+/** How a session log is protected. */
+export interface SessionLogOptions {
+  /**
+   * Removes secrets from what is written.
+   *
+   * Without one, the log keeps whatever it is given.
+   */
+  readonly redact?: Redactor;
+}
+
 /** A session log that is open for writing. */
 export class SessionLog {
   readonly #path: string;
   readonly #header: SessionHeader;
+  readonly #redact: Redactor;
   readonly #events: SessionEvent[] = [];
   #seq = 0;
   #closed = false;
   #queue: Promise<void> = Promise.resolve();
 
-  private constructor(path: string, header: SessionHeader) {
+  private constructor(
+    path: string,
+    header: SessionHeader,
+    redact: Redactor,
+  ) {
     this.#path = path;
     this.#header = header;
+    this.#redact = redact;
   }
 
   /**
@@ -35,10 +63,12 @@ export class SessionLog {
    *
    * @param path - Where the log lives.
    * @param header - The header to write.
+   * @param options - How the log is protected.
    */
   static async create(
     path: string,
     header: Omit<SessionHeader, "type" | "version">,
+    options: SessionLogOptions = {},
   ): Promise<SessionLog> {
     const full: SessionHeader = {
       ...header,
@@ -46,10 +76,16 @@ export class SessionLog {
       version: SESSION_FORMAT_VERSION,
     };
 
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify(full)}\n`, "utf8");
+    await mkdir(dirname(path), {
+      recursive: true,
+      mode: SESSION_DIRECTORY_MODE,
+    });
+    await writeFile(path, `${JSON.stringify(full)}\n`, {
+      encoding: "utf8",
+      mode: SESSION_LOG_MODE,
+    });
 
-    const log = new SessionLog(path, full);
+    const log = new SessionLog(path, full, options.redact ?? identityRedactor);
     log.#events.push({ type: "session.start", data: full });
     log.#seq = 1;
     return log;
@@ -59,14 +95,22 @@ export class SessionLog {
    * Open an existing session log for appending.
    *
    * @param path - Where the log lives.
+   * @param options - How the log is protected from now on.
    */
-  static async open(path: string): Promise<Result<SessionLog, FlowError>> {
+  static async open(
+    path: string,
+    options: SessionLogOptions = {},
+  ): Promise<Result<SessionLog, FlowError>> {
     const read = await readSessionFile(path);
     if (!read.ok) {
       return read;
     }
 
-    const log = new SessionLog(path, read.value.header);
+    const log = new SessionLog(
+      path,
+      read.value.header,
+      options.redact ?? identityRedactor,
+    );
     log.#events.push(...read.value.events);
     log.#seq = read.value.events.length;
     return ok(log);
@@ -90,24 +134,30 @@ export class SessionLog {
   /**
    * Append an event.
    *
-   * Writes are queued so that concurrent appends cannot interleave.
+   * Writes are queued so that concurrent appends cannot interleave. What is
+   * written is redacted first, so a secret that reached the conversation
+   * does not reach the disk.
    */
   append(event: SessionEvent): Promise<void> {
     if (this.#closed) {
       return Promise.resolve();
     }
 
+    const data = redactValue(event.data, this.#redact);
     const stored: StoredEvent = {
       type: event.type,
       seq: this.#seq,
       time: Date.now(),
-      data: event.data,
+      data,
     };
     this.#seq += 1;
-    this.#events.push(event);
+    this.#events.push({ type: event.type, data } as SessionEvent);
 
     this.#queue = this.#queue.then(async () => {
-      await appendFile(this.#path, `${JSON.stringify(stored)}\n`, "utf8");
+      await appendFile(this.#path, `${JSON.stringify(stored)}\n`, {
+        encoding: "utf8",
+        mode: SESSION_LOG_MODE,
+      });
     });
 
     return this.#queue;
@@ -212,13 +262,20 @@ export const readSessionFile = async (
  * @param path - Where the log lives.
  * @param header - The header to write.
  * @param events - The events to write, after the header.
+ * @param options - How the log is protected.
  */
 export const writeSessionFile = async (
   path: string,
   header: SessionHeader,
   events: readonly SessionEvent[],
+  options: SessionLogOptions = {},
 ): Promise<void> => {
-  await mkdir(dirname(path), { recursive: true });
+  await mkdir(dirname(path), {
+    recursive: true,
+    mode: SESSION_DIRECTORY_MODE,
+  });
+
+  const redact = options.redact ?? identityRedactor;
 
   const lines: string[] = [JSON.stringify(header)];
   events.forEach((event, index) => {
@@ -230,12 +287,38 @@ export const writeSessionFile = async (
         type: event.type,
         seq: index,
         time: Date.now(),
-        data: event.data,
+        data: redactValue(event.data, redact),
       } satisfies StoredEvent),
     );
   });
 
-  await writeFile(path, `${lines.join("\n")}\n`, "utf8");
+  await writeFile(path, `${lines.join("\n")}\n`, {
+    encoding: "utf8",
+    mode: SESSION_LOG_MODE,
+  });
+};
+
+/**
+ * Redact every string in a value, however deeply it is nested.
+ *
+ * @param value - The value to redact.
+ * @param redact - The redactor to use.
+ */
+export const redactValue = (value: unknown, redact: Redactor): unknown => {
+  if (typeof value === "string") {
+    return redact(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactValue(entry, redact));
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      out[key] = redactValue(entry, redact);
+    }
+    return out;
+  }
+  return value;
 };
 
 /** The default place a session log lives. */

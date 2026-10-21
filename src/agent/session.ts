@@ -19,6 +19,7 @@ import { createDefaultRegistry } from "../tools/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import { createToolContext } from "../tools/context.js";
 import type { ToolContext, ToolQuestion } from "../tools/types.js";
+import { createRedactor } from "../util/redact.js";
 import { realpathBestEffort } from "../util/paths.js";
 import { err, ok, type Result } from "../util/result.js";
 import { readMcpConfig } from "../mcp/config.js";
@@ -200,22 +201,33 @@ export class FlowSession {
       `${sessionId}.jsonl`,
     );
 
+    // The log is redacted with the same redactor the tools use, so a secret
+    // that reached the conversation does not reach the disk.
+    const secrets = await declaredSecrets({ env, home, config });
+    const redactor = createRedactor({ secrets });
+
     let log: SessionLog;
     if (options.resumePath !== undefined) {
-      const opened = await SessionLog.open(options.resumePath);
+      const opened = await SessionLog.open(options.resumePath, {
+        redact: redactor,
+      });
       if (!opened.ok) {
         return opened;
       }
       log = opened.value;
     } else {
-      log = await SessionLog.create(path, {
-        id: sessionId,
-        cwd: options.cwd,
-        startedAt: Date.now(),
-        flowCodeVersion: "0.0.0",
-        provider: built.value.id,
-        model: config.provider.model ?? "",
-      });
+      log = await SessionLog.create(
+        path,
+        {
+          id: sessionId,
+          cwd: options.cwd,
+          startedAt: Date.now(),
+          flowCodeVersion: "0.0.0",
+          provider: built.value.id,
+          model: config.provider.model ?? "",
+        },
+        { redact: redactor },
+      );
     }
 
     const session = new FlowSession(options, config, built.value, log);
@@ -489,14 +501,18 @@ export class FlowSession {
       projectSlug(this.cwd),
       `${sessionId}.jsonl`,
     );
-    const log = await SessionLog.create(path, {
-      id: sessionId,
-      cwd: this.cwd,
-      startedAt: Date.now(),
-      flowCodeVersion: "0.0.0",
-      provider: this.provider.id,
-      model: this.config.provider.model ?? "",
-    });
+    const log = await SessionLog.create(
+      path,
+      {
+        id: sessionId,
+        cwd: this.cwd,
+        startedAt: Date.now(),
+        flowCodeVersion: "0.0.0",
+        provider: this.provider.id,
+        model: this.config.provider.model ?? "",
+      },
+      { redact: createRedactor({ secrets: await this.#declaredSecrets() }) },
+    );
     await this.log.close();
     this.log = log;
   }
@@ -660,10 +676,34 @@ export class FlowSession {
 
   /** The secrets that should never appear in the model's context. */
   async #declaredSecrets(): Promise<readonly string[]> {
-    const key = await this.apiKey();
-    return key === undefined ? [] : [key];
+    return declaredSecrets({
+      env: this.#env,
+      home: this.#home,
+      config: this.config,
+    });
   }
 }
+
+/**
+ * The secrets that should never appear in the model's context.
+ *
+ * @param options - The environment, the home directory and the configuration.
+ */
+const declaredSecrets = async (options: {
+  readonly env: NodeJS.ProcessEnv;
+  readonly home: string;
+  readonly config: FlowCodeConfig;
+}): Promise<readonly string[]> => {
+  const key = await resolveApiKey({
+    env: options.env,
+    home: options.home,
+    provider: options.config.provider.provider,
+    ...(options.config.provider.apiKeyEnv === undefined
+      ? {}
+      : { apiKeyEnv: options.config.provider.apiKeyEnv }),
+  });
+  return key === undefined ? [] : [key];
+};
 
 /** An interface that shows nothing, for sessions with no terminal. */
 const silentUi: AgentUi = {

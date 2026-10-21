@@ -34,6 +34,11 @@ describe("the built CLI", () => {
   let workspace: string;
   let server: MockServer;
 
+  // The built CLI starts a fresh node process, which loads the whole
+  // dependency graph. On a busy machine that takes a few seconds, so these
+  // tests are given room rather than failing on a slow start.
+  const STARTUP_TIMEOUT_MS = 60_000;
+
   beforeAll(async () => {
     // The compiled CLI is what users run, so it is what is tested.
     await shell("npm run build", { cwd: projectRoot, timeout: 180_000 });
@@ -53,19 +58,19 @@ describe("the built CLI", () => {
   it("prints its version", async () => {
     const { stdout } = await cli(["--version"], { cwd: workspace });
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  });
+  }, STARTUP_TIMEOUT_MS);
 
   it("prints its help", async () => {
     const { stdout } = await cli(["--help"], { cwd: workspace });
     expect(stdout).toContain("Usage:");
     expect(stdout).toContain("--print");
-  });
+  }, STARTUP_TIMEOUT_MS);
 
   it("lists the commands in the help output", async () => {
     const { stdout } = await cli(["--help"], { cwd: workspace });
     expect(stdout).toContain("/model");
     expect(stdout).toContain("/compact");
-  });
+  }, STARTUP_TIMEOUT_MS);
 
   it("carries out a task against a local model server", async () => {
     const { stdout } = await cli(
@@ -83,11 +88,11 @@ describe("the built CLI", () => {
     );
 
     expect(stdout).toContain("Mock answer");
-  });
+  }, STARTUP_TIMEOUT_MS);
 
   it("exits with a non-zero status for an unknown command", async () => {
     await expect(cli(["nope"], { cwd: workspace })).rejects.toThrow();
-  });
+  }, STARTUP_TIMEOUT_MS);
 
   it("runs when it is reached through a symlink", async () => {
     // A package installed from npm is run through a symlink in
@@ -107,5 +112,5 @@ describe("the built CLI", () => {
       cwd: workspace,
     });
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  });
+  }, STARTUP_TIMEOUT_MS);
 });

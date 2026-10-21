@@ -125,8 +125,23 @@ describe("the session's tool context", () => {
     await session.close();
   });
 
-  it("gives a sub-agent the same redactor", async () => {
+  it("keeps the key out of the session log", async () => {
     const session = await createSession();
+
+    await session.log.append({
+      type: "note",
+      data: { text: `the key is ${SECRET}` },
+    });
+    await session.log.close();
+
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile(session.log.path, "utf8");
+    expect(text).not.toContain(SECRET);
+    expect(text).toContain("[redacted]");
+    await session.close();
+  });
+
+  it("gives a sub-agent the same redactor", async () => {    const session = await createSession();
     const context = await session.toolContext();
 
     const registry = new ToolRegistry();

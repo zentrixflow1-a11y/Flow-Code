@@ -701,6 +701,10 @@ diffable, and yours to delete. Flow Code never rewrites a session log Ã¢â‚�
 compaction is recorded as an event, and the view of the conversation is derived
 from the log rather than replacing it.
 
+The log is written for your account alone — mode `0600`, in a directory of
+mode `0700` — and everything written into it is redacted first, so a key that
+reached the conversation does not reach the disk.
+
 ```bash
 flowcode --resume ~/.flowcode/sessions/my-project/20261021-204501-a1b2c3.jsonl
 ```

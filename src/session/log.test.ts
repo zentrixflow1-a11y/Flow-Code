@@ -1,8 +1,9 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readSessionFile, SessionLog } from "./log.js";
+import { createRedactor } from "../util/redact.js";
 import type { SessionEvent, SessionHeader } from "./types.js";
 
 describe("the session log", () => {
@@ -121,6 +122,85 @@ describe("the session log", () => {
       const messages = loaded.value.events.filter((event) => event.type === "user.message");
       expect(messages).toHaveLength(2);
     }
+  });
+});
+
+describe("a session log on disk", () => {
+  let directory: string;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "flowcode-session-"));
+  });
+
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const header = {
+    id: "session-1",
+    cwd: "/home/user/project",
+    startedAt: 1_700_000_000_000,
+    flowCodeVersion: "0.1.0",
+    provider: "ollama",
+    model: "mock-model",
+  };
+
+  it("is created for its owner alone", async () => {
+    if (process.platform === "win32") {
+      // Windows has no POSIX permissions; the file is still created, and the
+      // user's own account is the only one that can read it.
+      return;
+    }
+
+    const nested = join(directory, "sessions", "project");
+    const path = join(nested, "session.jsonl");
+    const log = await SessionLog.create(path, header);
+    await log.close();
+
+    const file = await stat(path);
+    expect(file.mode & 0o777).toBe(0o600);
+
+    const folder = await stat(nested);
+    expect(folder.mode & 0o777).toBe(0o700);
+  });
+
+  it("keeps a secret out of what it writes", async () => {
+    const path = join(directory, "session.jsonl");
+    const log = await SessionLog.create(path, header, {
+      redact: createRedactor({ secrets: ["a-plain-value-nobody-would-guess"] }),
+    });
+
+    await log.append({
+      type: "user.message",
+      data: { text: "the key is a-plain-value-nobody-would-guess" },
+    });
+    await log.close();
+
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile(path, "utf8");
+    expect(text).not.toContain("a-plain-value-nobody-would-guess");
+    expect(text).toContain("[redacted]");
+  });
+
+  it("keeps a secret out of a nested event", async () => {
+    const path = join(directory, "session.jsonl");
+    const log = await SessionLog.create(path, header, {
+      redact: createRedactor({ secrets: ["a-plain-value-nobody-would-guess"] }),
+    });
+
+    await log.append({
+      type: "tool.call",
+      data: {
+        id: "call-1",
+        name: "run_command",
+        args: { command: "echo a-plain-value-nobody-would-guess" },
+      },
+    });
+    await log.close();
+
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile(path, "utf8");
+    expect(text).not.toContain("a-plain-value-nobody-would-guess");
   });
 });
 

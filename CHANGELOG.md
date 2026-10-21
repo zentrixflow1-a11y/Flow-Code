@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A session log kept everything, and everybody could read it.** The log
+  was created with mode `0644` inside a directory of mode `0755`, and it
+  held the conversation verbatim — so a key that reached the conversation
+  reached the disk, where every account on the machine could read it. The
+  log is now created for its owner alone (`0600`, in a `0700` directory),
+  and everything written into it is redacted first.
+
 - **A sub-agent did not redact what it found.** The main agent removed
   secrets from what a tool returned; a sub-agent was given a context that
   changed nothing, so a key it read came back to the parent in the clear.
@@ -67,6 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is never sent to an endpoint the user's own configuration did not choose.
 
 ### Changed
+
+- **The built-CLI test is given room to start.** It spawns a fresh node
+  process, which loads the whole dependency graph, and on a busy machine that
+  took longer than the five-second default. The test now allows a minute,
+  so it tests the command rather than the speed of the machine.
 
 - **The guard is part of the tool context, not an optional extra.** A tool
   that has no guard is a tool that acts whatever the permission engine
