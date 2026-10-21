@@ -43,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret. The command is now split the way a shell splits it, the
   punctuation a shell puts around a name is taken off it, and a wildcard that
   could reach a credential file counts as naming one — `cat .e*` reads
-  `.env`.
+  `.env`. A pattern the matcher cannot reason about — a bracket or a brace,
+  which the shell expands — counts as naming one too.
 - **A read-only command could run a program.** `fd -x rm` deletes files,
   `rg --pre` runs a command, `tree -o` writes a file, and `find -fprint0`
   writes one too. Those options are refused now, and a program is no longer

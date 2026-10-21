@@ -126,7 +126,13 @@ describe("the shell tool", () => {
   it("refuses a command that hides the credential behind a wildcard", async () => {
     await workspace.write(".env", "SECRET_TOKEN=hunter2\n");
 
-    for (const command of ["cat .e*", "cat .env*", "cat $HOME/.e*"]) {
+    for (const command of [
+      "cat .e*",
+      "cat .env*",
+      "cat $HOME/.e*",
+      "cat .[a-z]*",
+      "cat {,.}env",
+    ]) {
       const result = await executeTool(
         runCommandTool,
         { command },

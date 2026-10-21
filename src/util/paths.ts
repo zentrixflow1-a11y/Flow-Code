@@ -318,10 +318,16 @@ export const namesSecret = (word: string): boolean => {
     // A pattern is compared by its last segment, because that is the part
     // that names the file: `$HOME/.e*` reads `.env`.
     const base = cleaned.slice(cleaned.lastIndexOf("/") + 1);
-    if (
-      isGlob(base) &&
-      SECRET_NAMES.some((name) => matchGlob(base, name))
-    ) {
+
+    // A bracket or a brace is a pattern the shell expands, and this matcher
+    // does not know what it expands to: `.[a-z]*` reaches `.env` and
+    // `{,.}env` reaches `.env`. A pattern that cannot be reasoned about
+    // counts as naming a secret.
+    if (/[[\]{}]/.test(base)) {
+      return true;
+    }
+
+    if (isGlob(base) && SECRET_NAMES.some((name) => matchGlob(base, name))) {
       return true;
     }
   }

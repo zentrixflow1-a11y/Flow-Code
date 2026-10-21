@@ -204,6 +204,15 @@ describe("a command that reads a secret", () => {
     expect(isReadOnlyCommand("cat /etc/shadow", "linux")).toBe(false);
   });
 
+  it("is not read-only when a pattern it cannot reason about could reach one", () => {
+    // A bracket and a brace are expanded by the shell, and this matcher
+    // does not know what they expand to.
+    expect(isReadOnlyCommand("cat .[a-z]*", "linux")).toBe(false);
+    expect(isReadOnlyCommand("cat .e[nv]*", "linux")).toBe(false);
+    expect(isReadOnlyCommand("cat {,.}env", "linux")).toBe(false);
+    expect(isReadOnlyCommand("ls .[a-z]*", "linux")).toBe(false);
+  });
+
   it("does not mind a wildcard that cannot reach one", () => {
     expect(isReadOnlyCommand("cat *.ts", "linux")).toBe(true);
     expect(isReadOnlyCommand("cat src/*.ts", "linux")).toBe(true);
