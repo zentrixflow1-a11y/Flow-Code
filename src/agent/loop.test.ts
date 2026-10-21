@@ -62,6 +62,21 @@ const writeTool: ToolDefinition<{ path: string }> = {
   },
 };
 
+const commandTool: ToolDefinition<{ command: string }> = {
+  name: "run_command",
+  description: "Run a shell command.",
+  schema: z.object({ command: z.string() }),
+  category: "execute",
+  subjectKind: "text",
+  concurrencySafe: false,
+  subject(args) {
+    return args.command;
+  },
+  async execute(args) {
+    return { ok: true, output: `ran ${args.command}` };
+  },
+};
+
 describe("the agent loop", () => {
   let directory: string;
   let log: SessionLog;
@@ -225,8 +240,71 @@ describe("the agent loop", () => {
     expect(toolMessage?.content).toContain("not this time");
   });
 
-  it("refuses a tool that a deny rule blocks, without asking", async () => {
+  it("does not ask before a command that only reads", async () => {
     const registry = new ToolRegistry();
+    registry.register(commandTool);
+
+    const provider = scriptedProvider([
+      [
+        {
+          type: "tool_call",
+          call: { id: "call_1", name: "run_command", args: { command: "ls -la" } },
+        },
+        { type: "done", reason: "tool_calls" },
+      ],
+      [{ type: "text_delta", text: "listed" }, { type: "done", reason: "stop" }],
+    ]);
+
+    // No approval is queued: a command that only reads must not need one.
+    const result = await runAgent(
+      buildOptions(provider, quietUi(), { registry }),
+      "list the files",
+    );
+
+    expect(result.text).toBe("listed");
+    const messages = deriveMessages(log.events);
+    expect(messages.find((message) => message.role === "tool")?.content).toBe(
+      "ran ls -la",
+    );
+  });
+
+  it("asks before a command that only looks like it reads", async () => {
+    const registry = new ToolRegistry();
+    registry.register(commandTool);
+
+    const provider = scriptedProvider([
+      [
+        {
+          type: "tool_call",
+          call: {
+            id: "call_1",
+            name: "run_command",
+            args: { command: "echo $(touch x)" },
+          },
+        },
+        { type: "done", reason: "tool_calls" },
+      ],
+      [{ type: "text_delta", text: "refused" }, { type: "done", reason: "stop" }],
+    ]);
+
+    const asked: string[] = [];
+    const ui: AgentUi = {
+      onText: () => undefined,
+      onReasoning: () => undefined,
+      onToolStart: () => undefined,
+      onToolEnd: () => undefined,
+      approve: async (request) => {
+        asked.push(request.tool);
+        return { kind: "deny", reason: "not this time" };
+      },
+    };
+
+    await runAgent(buildOptions(provider, ui, { registry }), "run something");
+
+    expect(asked).toEqual(["run_command"]);
+  });
+
+  it("refuses a tool that a deny rule blocks, without asking", async () => {    const registry = new ToolRegistry();
     registry.register(writeTool);
 
     const provider = scriptedProvider([

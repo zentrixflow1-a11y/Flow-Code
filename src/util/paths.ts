@@ -177,3 +177,73 @@ export const isProtectedPath = (path: string): boolean => {
   const name = basename(posix);
   return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(name));
 };
+
+/**
+ * Directory names whose contents are credentials.
+ *
+ * These are the directories that hold keys, tokens and passwords.
+ */
+export const SENSITIVE_DIRECTORIES: readonly string[] = [
+  ".ssh",
+  ".aws",
+  ".gnupg",
+  ".azure",
+  ".kube",
+  ".docker",
+  ".password-store",
+  ".config/gcloud",
+];
+
+/** File names that hold credentials. */
+export const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
+  /^\.env(\..*)?$/i,
+  /^\.npmrc$/i,
+  /^\.yarnrc(\.yml)?$/i,
+  /^\.netrc$/i,
+  /^_netrc$/i,
+  /^\.pypirc$/i,
+  /^\.git-credentials$/i,
+  /^\.htpasswd$/i,
+  /^\.pgpass$/i,
+  /^\.s3cfg$/i,
+  /\.pem$/i,
+  /\.key$/i,
+  /\.p12$/i,
+  /\.pfx$/i,
+  /^id_rsa/i,
+  /^id_ecdsa/i,
+  /^id_ed25519/i,
+  /^credentials(\.[a-z]+)?$/i,
+  /^secrets?(\.[a-z]+)?$/i,
+  /\.secret$/i,
+];
+
+/**
+ * Whether a path holds a secret.
+ *
+ * This is the single answer to "may this file be read?", and it is asked by
+ * path rather than by tool: a file that holds a credential is a credential
+ * whether it is read directly, searched for, listed or printed by a command.
+ *
+ * The check is on the path's own segments, so a directory called `.ssh`
+ * anywhere on the path is enough, and the file name is matched
+ * case-insensitively, because `.ENV` is the same file as `.env`.
+ *
+ * @param path - The path to check.
+ */
+export const isSensitivePath = (path: string): boolean => {
+  const posix = toPosix(path);
+  const segments = posix
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== "." && segment !== "..");
+
+  for (const segment of segments) {
+    const lowered = segment.toLowerCase();
+    if (SENSITIVE_DIRECTORIES.some((directory) => lowered === directory.toLowerCase())) {
+      return true;
+    }
+  }
+
+  const name = segments[segments.length - 1] ?? "";
+  return SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(name));
+};

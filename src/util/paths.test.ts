@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProtectedPath, isInside, toPosix } from "./paths.js";
+import { isProtectedPath, isInside, isSensitivePath, toPosix } from "./paths.js";
 
 describe("toPosix", () => {
   it("replaces backslashes with forward slashes", () => {
@@ -57,5 +57,48 @@ describe("isProtectedPath", () => {
     expect(isProtectedPath("/project/src/index.ts")).toBe(false);
     expect(isProtectedPath("/project/README.md")).toBe(false);
     expect(isProtectedPath("/project/environment.ts")).toBe(false);
+  });
+});
+
+describe("isSensitivePath", () => {
+  it("finds an environment file", () => {
+    expect(isSensitivePath(".env")).toBe(true);
+    expect(isSensitivePath("/project/.env")).toBe(true);
+    expect(isSensitivePath("/project/.env.local")).toBe(true);
+    expect(isSensitivePath("/project/.env.production")).toBe(true);
+  });
+
+  it("finds a key or a certificate", () => {
+    expect(isSensitivePath("/home/user/.ssh/id_rsa")).toBe(true);
+    expect(isSensitivePath("/home/user/.ssh/id_ed25519")).toBe(true);
+    expect(isSensitivePath("/project/server.pem")).toBe(true);
+    expect(isSensitivePath("/project/server.key")).toBe(true);
+    expect(isSensitivePath("/project/store.p12")).toBe(true);
+  });
+
+  it("finds a credential file by name", () => {
+    expect(isSensitivePath("/project/.npmrc")).toBe(true);
+    expect(isSensitivePath("/home/user/.netrc")).toBe(true);
+    expect(isSensitivePath("/home/user/.git-credentials")).toBe(true);
+    expect(isSensitivePath("/project/credentials.json")).toBe(true);
+    expect(isSensitivePath("/project/secrets.yaml")).toBe(true);
+  });
+
+  it("ignores the case of the name", () => {
+    expect(isSensitivePath("/project/.ENV")).toBe(true);
+    expect(isSensitivePath("/project/Server.PEM")).toBe(true);
+  });
+
+  it("looks at every segment of the path", () => {
+    expect(isSensitivePath("/project/.aws/credentials")).toBe(true);
+    expect(isSensitivePath("/project/sub/.gnupg/secring.gpg")).toBe(true);
+  });
+
+  it("leaves ordinary files alone", () => {
+    expect(isSensitivePath("/project/src/index.ts")).toBe(false);
+    expect(isSensitivePath("/project/README.md")).toBe(false);
+    expect(isSensitivePath("/project/environment.ts")).toBe(false);
+    expect(isSensitivePath("/project/src/environmentals.ts")).toBe(false);
+    expect(isSensitivePath("/project/config.json")).toBe(false);
   });
 });

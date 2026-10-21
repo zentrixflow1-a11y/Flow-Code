@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`isSensitivePath`** (`src/util/paths.ts`): the single answer to "may this
+  file be read?". It is a question about the path, not about the tool that
+  asks it, so a credential file is a credential file however it is reached.
+
 - **Workspace trust** (`src/security/trust.ts`): a project's own files are
   code — a hook is a command, an MCP server is a program, a configuration file
   says where an API key is sent — so none of them is read until the user has
@@ -19,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A command that only looked harmless was run without asking.** The
+  read-only shortcut is a gate that lets a command through without a prompt,
+  and it was a loose guess: `echo $(touch x)`, `echo \`touch x\``, a command
+  with an embedded newline and `env sh -c '...'` all passed it, so they ran
+  in `ask` mode with nobody asked. The shortcut is now an allowlist that
+  fails closed: a command substitution, a backtick, a process substitution, a
+  redirect, a newline and a backslash all rule a command out, `env` and
+  `printenv` are gone, `git` is limited to `status`, `log`, `diff`, `show`,
+  `rev-parse`, `ls-files` and `blame` without `-c` or `--output`, and `find`
+  may not write a file or run a command. On Windows, where the shell is
+  PowerShell and the same word means a different program, only `ls`, `dir`,
+  `pwd`, `echo` and the read-only `git` subcommands are on the list at all.
 - **A project's own configuration could take over the harness.** The project's
   `config.json` was merged like any other layer, so a checkout of somebody
   else's repository could set `permissions.mode` to `trust`, add allow rules

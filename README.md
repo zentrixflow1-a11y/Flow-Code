@@ -442,6 +442,32 @@ ceiling the mode sets. A rule that names a tool and nothing else, like
 `run_command`, blocks the whole tool Ã¢â‚¬â€ and Flow Code then stops offering it to
 the model at all, so the model never asks for it.
 
+### Commands that only read
+
+A command that only reads is not asked about: `ls`, `git status` and a few
+others go straight through in `ask` mode.
+
+The list is deliberately small, and it fails closed. A command is on it only
+when its first word is on the list, when it contains no command substitution,
+no redirect, no newline and no backslash, and when none of its arguments
+points at a file that holds a credential. Anything else asks.
+
+| Command | Allowed |
+| --- | --- |
+| `ls`, `dir`, `pwd`, `echo` | Yes |
+| `cat`, `head`, `tail`, `type`, `grep`, `rg`, `find`, `fd`, `wc`, `stat`, `file`, `tree`, `diff` | Yes, unless an argument points at a credential file |
+| `git status`, `git log`, `git diff`, `git show`, `git rev-parse`, `git ls-files`, `git blame` | Yes, unless the arguments change the configuration or write a file |
+| `env`, `printenv` | No — they print the environment, which is where the keys are |
+| `node`, `python`, `npm` | No — running a program is not reading |
+
+On Windows the shell is PowerShell, where `cat` and `find` mean something
+else, so only `ls`, `dir`, `pwd`, `echo` and the read-only `git` subcommands
+are on the list there.
+
+This is a shortcut, not a boundary: it decides whether to ask, not what may
+happen. The operating-system sandbox is what confines a command, and it is
+off by default.
+
 ### The modes
 
 | Mode | What it allows |

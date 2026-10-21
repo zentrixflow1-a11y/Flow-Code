@@ -7,6 +7,7 @@
  * tighten but never loosen.
  */
 import type { PermissionMode, ToolCategory } from "./types.js";
+import { isSensitivePath } from "../util/paths.js";
 
 /** How a mode treats a tool category when no rule applies. */
 export type CategoryOutcome = "allow" | "ask" | "deny";
@@ -77,92 +78,171 @@ export const describeMode = (mode: PermissionMode): string => {
 /**
  * The commands that are treated as read-only.
  *
- * This list is a convenience, not a security boundary: a command can always
- * be disguised, and a shell tool that runs a command runs whatever it is
- * given. It exists so that `ls` and `git status` do not interrupt the user.
+ * This is an allowlist, and it fails closed: a command that is not on the
+ * list is not read-only, and a command on the list is only read-only when
+ * every one of its arguments is harmless too.
+ *
+ * It exists so that `ls` and `git status` do not interrupt the user. It is a
+ * prompt-avoidance gate, not a sandbox — which is why it is strict rather
+ * than clever.
  */
 export const READ_ONLY_COMMANDS: ReadonlySet<string> = new Set([
   "ls",
   "dir",
+  "pwd",
   "cat",
   "type",
   "head",
   "tail",
-  "wc",
-  "which",
-  "where",
-  "whoami",
-  "pwd",
-  "cd",
-  "echo",
-  "date",
-  "env",
-  "printenv",
   "grep",
   "egrep",
   "fgrep",
   "rg",
   "find",
   "fd",
-  "diff",
+  "wc",
   "stat",
-  "du",
-  "df",
   "file",
   "tree",
-  "ps",
-  "uname",
-  "node",
-  "python",
-  "python3",
-  "npm",
-  "pnpm",
-  "yarn",
-  "pip",
-  "pip3",
+  "diff",
+  "echo",
+]);
+
+/**
+ * The commands that are treated as read-only in PowerShell.
+ *
+ * The shell on Windows is PowerShell, where `cat` and `type` are aliases for
+ * `Get-Content` and `find` is a different program altogether. Rather than
+ * guess what each alias does, only a handful of commands that mean the same
+ * thing everywhere is allowed.
+ */
+export const POWERSHELL_READ_ONLY_COMMANDS: ReadonlySet<string> = new Set([
+  "pwd",
+  "ls",
+  "dir",
+  "echo",
 ]);
 
 /**
  * The read-only forms of `git`.
  *
- * `git` can write, so only the inspection subcommands are read-only.
+ * `git` can write, so only the inspection subcommands are read-only. The
+ * subcommand must come first: a global option before it, such as `-c`, is
+ * how a configuration is injected, and that is not read-only.
  */
 export const READ_ONLY_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
   "status",
   "log",
   "diff",
   "show",
-  "branch",
-  "remote",
-  "describe",
   "rev-parse",
-  "blame",
-  "shortlog",
   "ls-files",
-  "ls-remote",
-  "config",
-  "stash",
-  "tag",
-  "whatchanged",
-  "cat-file",
-  "grep",
+  "blame",
 ]);
+
+/**
+ * The git options that change what the command does.
+ *
+ * `-c` sets a configuration, which can point git at another program;
+ * `--output` writes a file; `--ext-diff` and `--textconv` run an external
+ * command; `--exec-path` changes where git looks for its subcommands.
+ */
+export const UNSAFE_GIT_ARGUMENTS: readonly string[] = [
+  "-c",
+  "--config-env",
+  "--output",
+  "--ext-diff",
+  "--textconv",
+  "--exec-path",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+];
+
+/**
+ * The `find` options that write a file or run a command.
+ *
+ * `fd` spells the same idea with two dashes, so both are listed.
+ */
+export const UNSAFE_FIND_ARGUMENTS: readonly string[] = [
+  "-fprint",
+  "-fprintf",
+  "-fls",
+  "-ok",
+  "-okdir",
+  "-exec",
+  "-execdir",
+  "-delete",
+  "--exec",
+  "--exec-batch",
+  "--delete",
+];
+
+/**
+ * The environment variables that may be set before a read-only command.
+ *
+ * Anything else — `PATH` above all — decides which program runs, so it is
+ * not allowed.
+ */
+export const SAFE_ENVIRONMENT_VARIABLES: ReadonlySet<string> = new Set([
+  "CI",
+  "COLUMNS",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LINES",
+  "NO_COLOR",
+  "NODE_ENV",
+  "TERM",
+  "TZ",
+]);
+
+/**
+ * The pieces of a command that make it impossible to reason about safely.
+ *
+ * A command substitution, a backtick, a process substitution, a redirect, a
+ * newline and a backslash all let a command do something other than what its
+ * first word suggests.
+ */
+const UNSAFE_FRAGMENTS: readonly string[] = [
+  "$(",
+  ")",
+  "`",
+  "<",
+  ">",
+  "\n",
+  "\r",
+  "\\",
+];
 
 /**
  * Whether a command only reads.
  *
- * The check is deliberately shallow: it looks at the first word of each
+ * The check is deliberately strict. It looks at the first word of each
  * segment of a compound command, and treats a chain of read-only commands as
- * read-only. It is a prompt-avoidance heuristic, not a sandbox.
+ * read-only. Anything it does not understand is not read-only.
  *
  * @param command - The command text.
+ * @param platform - The host platform; the shell differs on Windows.
  */
-export const isReadOnlyCommand = (command: string): boolean => {
+export const isReadOnlyCommand = (
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean => {
+  if (command.trim() === "") {
+    return false;
+  }
+
+  if (UNSAFE_FRAGMENTS.some((fragment) => command.includes(fragment))) {
+    return false;
+  }
+
   const segments = splitCommand(command);
   if (segments.length === 0) {
     return false;
   }
-  return segments.every(isReadOnlySegment);
+
+  return segments.every((segment) => isReadOnlySegment(segment, platform));
 };
 
 /** Split a command line into its top-level segments. */
@@ -201,55 +281,184 @@ const splitCommand = (command: string): string[] => {
   return parts;
 };
 
-/** Whether one segment of a command only reads. */
-const isReadOnlySegment = (segment: string): boolean => {
-  const words = segment.split(/\s+/).filter((word) => word !== "");
+/**
+ * Split a segment into its words, taking the quotes into account.
+ *
+ * A quoted word is one word, whatever is inside it.
+ */
+const tokenize = (segment: string): string[] => {
+  const words: string[] = [];
+  let current = "";
+  let started = false;
+  let quote: string | undefined;
 
-  // Skip leading environment assignments such as `NODE_ENV=test`.
+  for (const character of segment) {
+    if (quote !== undefined) {
+      if (character === quote) {
+        quote = undefined;
+        continue;
+      }
+      current += character;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      // A quoted word is an argument even when it is empty.
+      started = true;
+      continue;
+    }
+    if (character === " " || character === "\t") {
+      if (started) {
+        words.push(current);
+        current = "";
+        started = false;
+      }
+      continue;
+    }
+    current += character;
+    started = true;
+  }
+
+  if (started) {
+    words.push(current);
+  }
+
+  return words;
+};
+
+/** Whether one segment of a command only reads. */
+const isReadOnlySegment = (
+  segment: string,
+  platform: NodeJS.Platform,
+): boolean => {
+  const words = tokenize(segment);
+  if (words.length === 0) {
+    return false;
+  }
+
+  // Skip leading environment assignments such as `NODE_ENV=test`, but only
+  // the ones that cannot change which program runs.
   let index = 0;
-  while (index < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] as string)) {
+  while (index < words.length && isAssignment(words[index] as string)) {
+    const name = assignmentName(words[index] as string);
+    if (!SAFE_ENVIRONMENT_VARIABLES.has(name)) {
+      return false;
+    }
     index += 1;
   }
 
-  const program = (words[index] ?? "").replace(/^.*[/\\]/, "");
-  if (program === "") {
+  const raw = words[index];
+  if (raw === undefined) {
     return false;
   }
 
-  if (program === "git") {
-    const subcommand = words[index + 1];
-    return subcommand !== undefined && READ_ONLY_GIT_SUBCOMMANDS.has(subcommand);
+  const program = platform === "win32" ? raw.toLowerCase() : raw;
+  const name = program.replace(/^.*[/\\]/, "");
+
+  if (name === "git") {
+    return isReadOnlyGit(words.slice(index + 1));
   }
 
-  if (!READ_ONLY_COMMANDS.has(program)) {
+  const allowed =
+    platform === "win32" ? POWERSHELL_READ_ONLY_COMMANDS : READ_ONLY_COMMANDS;
+  if (!allowed.has(name)) {
     return false;
   }
 
-  // Redirecting the output writes a file, so it is not read-only.
-  if (hasFileRedirect(segment)) {
+  const arguments_ = words.slice(index + 1);
+
+  if (arguments_.some((argument) => writesAFile(argument))) {
     return false;
   }
 
-  // `find` and `rm` style programs can act; only allow them without an
-  // action flag.
-  if (program === "find") {
-    return !words.some((word) => word === "-delete" || word === "-exec" || word === "-execdir");
-  }
-  if (program === "npm" || program === "pnpm" || program === "yarn") {
-    const subcommand = words[index + 1];
-    return subcommand === "view" || subcommand === "list" || subcommand === "ls";
-  }
-  if (program === "node" || program === "python" || program === "python3") {
-    // Running a program is not read-only, even though the interpreter is.
-    return false;
+  if (name === "find" || name === "fd") {
+    if (arguments_.some((argument) => UNSAFE_FIND_ARGUMENTS.includes(argument))) {
+      return false;
+    }
   }
 
-  return true;
+  return !arguments_.some((argument) => touchesASecret(argument));
+};
+
+/** Whether a word is an environment assignment. */
+const isAssignment = (word: string): boolean =>
+  /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
+
+/** The name of an environment assignment. */
+const assignmentName = (word: string): string =>
+  word.slice(0, word.indexOf("="));
+
+/**
+ * Whether an argument makes the command write a file.
+ *
+ * `--output` is the one that matters: `diff`, `git` and `grep` all have
+ * variants of it, and all of them write.
+ */
+const writesAFile = (argument: string): boolean =>
+  argument === "--output" || argument.startsWith("--output=");
+
+/**
+ * Whether an argument points at a file that holds a secret.
+ *
+ * The check is on the path, so `cat .env`, `grep -r key .env` and
+ * `git show HEAD:.env` are all refused.
+ */
+const touchesASecret = (argument: string): boolean => {
+  if (isSensitivePath(argument)) {
+    return true;
+  }
+
+  // A revision may be written in front of the path: `HEAD:secrets.json`.
+  const colon = argument.indexOf(":");
+  if (colon !== -1) {
+    return isSensitivePath(argument.slice(colon + 1));
+  }
+
+  return false;
 };
 
 /**
- * Whether a command segment redirects its output to a file.
+ * Whether a set of git arguments only reads.
  *
- * A file-descriptor duplication such as `2>&1` is not a file redirect.
+ * @param words - The words after `git`.
  */
-const hasFileRedirect = (segment: string): boolean => /(^|[^&])>\s*[^&\s]/.test(segment);
+const isReadOnlyGit = (words: readonly string[]): boolean => {
+  if (words.length === 0) {
+    return false;
+  }
+
+  // Only `--no-pager` may come before the subcommand. Anything else — `-c`
+  // above all — is a way of changing what git does.
+  let index = 0;
+  while (index < words.length && words[index] === "--no-pager") {
+    index += 1;
+  }
+
+  const subcommand = words[index];
+  if (subcommand === undefined || !READ_ONLY_GIT_SUBCOMMANDS.has(subcommand)) {
+    return false;
+  }
+
+  const arguments_ = words.slice(index + 1);
+
+  for (const argument of arguments_) {
+    if (UNSAFE_GIT_ARGUMENTS.some((flag) => isGitFlag(argument, flag))) {
+      return false;
+    }
+  }
+
+  return !arguments_.some((argument) => touchesASecret(argument));
+};
+
+/**
+ * Whether an argument is a git flag.
+ *
+ * `-c` is matched with anything after it, because `-cfoo=bar` is the same
+ * thing written tightly.
+ */
+const isGitFlag = (argument: string, flag: string): boolean => {
+  if (flag.startsWith("--")) {
+    return argument === flag || argument.startsWith(`${flag}=`);
+  }
+  return argument === flag || (argument.startsWith(flag) && !argument.startsWith("--"));
+};

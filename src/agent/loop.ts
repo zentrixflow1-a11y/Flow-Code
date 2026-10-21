@@ -464,7 +464,9 @@ const decideFor = async (
     rules: options.rules,
     context: options.permissionContext,
     withinWorkspace,
-    ...(isReadOnlyCommandFor(call) ? { readOnlyCommand: true } : {}),
+    ...(isReadOnlyCommandFor(call, options.toolContext.platform)
+      ? { readOnlyCommand: true }
+      : {}),
   };
 
   return decidePermission(request);
@@ -496,11 +498,22 @@ const isWithinWorkspace = async (
   return resolved.ok;
 };
 
-/** Whether a call is a command that only reads. */
-const isReadOnlyCommandFor = (call: ToolCall): boolean => {
+/**
+ * Whether a call is a command that only reads.
+ *
+ * The platform matters: the shell on Windows is PowerShell, where the same
+ * word can mean a different program.
+ */
+const isReadOnlyCommandFor = (
+  call: ToolCall,
+  platform: NodeJS.Platform,
+): boolean => {
   if (call.name !== "run_command") {
     return false;
   }
   const args = call.args as { command?: unknown } | undefined;
-  return typeof args?.command === "string" && isReadOnlyCommand(args.command);
+  return (
+    typeof args?.command === "string" &&
+    isReadOnlyCommand(args.command, platform)
+  );
 };
