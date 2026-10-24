@@ -118,6 +118,12 @@ export const runHeadless = async (options: HeadlessOptions): Promise<number> => 
     );
   }
 
+  const onSignal = (): void => {
+    session.value.abort();
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+
   try {
     const result = await session.value.run(options.task);
     const text = collected.join("");
@@ -146,6 +152,8 @@ export const runHeadless = async (options: HeadlessOptions): Promise<number> => 
         return 1;
     }
   } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
     await session.value.close();
   }
 };

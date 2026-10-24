@@ -129,6 +129,7 @@ export const runInteractive = async (
       onSubmit={(text) => void onSubmit(text)}
       onInterrupt={() => {
         interrupted = true;
+        session.abort();
         state.notify("Interrupted.");
       }}
       onExit={() => {

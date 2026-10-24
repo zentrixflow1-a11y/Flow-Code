@@ -121,6 +121,8 @@ export class FlowSession {
   #resolvedCwd: string;
   /** The operating-system sandbox in use, when one is. */
   #sandbox: { readonly kind: SandboxKind; readonly roots: readonly string[] } | undefined;
+  /** Cancels the current run. */
+  #abortController = new AbortController();
 
   readonly #options: FlowSessionOptions;
   readonly #home: string;
@@ -439,12 +441,20 @@ export class FlowSession {
     return undefined;
   };
 
+  /** Cancel the current run. */
+  abort(): void {
+    this.#abortController.abort();
+  }
+
   /**
    * Run the agent.
    *
    * @param prompt - The user's message, when the run starts with one.
    */
   async run(prompt?: string): Promise<AgentResult> {
+    // A fresh controller per run, so a previous cancellation does not
+    // poison the next one.
+    this.#abortController = new AbortController();
     // The project's own instructions and the MCP servers' instructions both
     // go into the model's context.
     const instructions = [this.projectInstructions, this.#mcpInstructions]
@@ -472,6 +482,7 @@ export class FlowSession {
       ...(instructions === "" ? {} : { extraInstructions: instructions }),
       ...(this.#options.signal === undefined ? {} : { signal: this.#options.signal }),
       ...(this.#options.maxTurns === undefined ? {} : { maxTurns: this.#options.maxTurns }),
+      signal: this.#abortController.signal,
     };
 
     return runAgent(agentOptions, prompt);
