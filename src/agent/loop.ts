@@ -19,7 +19,8 @@
  */
 import { flowError, type FlowError } from "../errors.js";
 import { realpathSync } from "node:fs";
-import { isInside, isSensitivePath } from "../util/paths.js";
+import { isAbsolute, resolve } from "node:path";
+import { commandReferencesRiskyPath } from "../permissions/riskypath.js";
 import { assembleRequest } from "../context/assembler.js";
 import { buildSystemPrompt } from "../context/system-prompt.js";
 import { decidePermission } from "../permissions/engine.js";
@@ -486,7 +487,12 @@ const decideFor = async (
     rules: options.rules,
     context: options.permissionContext,
     withinWorkspace,
-    ...(isReadOnlyCommandFor(call, options.toolContext.platform, options.toolContext)
+    ...(isReadOnlyCommandFor(
+      call,
+      options.toolContext.platform,
+      options.toolContext,
+      options.permissionContext.home,
+    )
       ? { readOnlyCommand: true }
       : {}),
   };
@@ -532,6 +538,7 @@ const isReadOnlyCommandFor = (
   call: ToolCall,
   platform: NodeJS.Platform,
   context: ToolContext,
+  home: string,
 ): boolean => {
   if (call.name !== "run_command") {
     return false;
@@ -544,31 +551,27 @@ const isReadOnlyCommandFor = (
     return false;
   }
 
-  // Resolve every path-like argument: a symlink to a credential file
-  // (notes.txt -> .env) or a path outside the workspace must prompt.
-  const words = args.command.split(/\s+/);
-  for (const word of words) {
-    if (word === "") continue;
-    if (word.startsWith("-")) continue;
-    // Strip quotes
-    const cleaned = word.replace(/^['"]|['"]$/g, "");
-    if (cleaned === "") continue;
+  // Resolve the run_command's own cwd argument, if any, against the workspace.
+  let runCwd: string | undefined;
+  const rawCwd = (args as { cwd?: unknown }).cwd;
+  if (typeof rawCwd === "string" && rawCwd !== "") {
+    const candidate = isAbsolute(rawCwd) ? rawCwd : resolve(context.cwd, rawCwd);
     try {
-      const resolved = realpathSync(cleaned.startsWith("/") || /^[A-Za-z]:/.test(cleaned)
-        ? cleaned
-        : `${context.cwd}/${cleaned}`);
-      if (isSensitivePath(resolved)) {
-        return false;
-      }
-      // Outside workspace check
-      const roots = [context.workspaceRoot, ...context.additionalDirectories];
-      const inside = roots.some((root) => isInside(resolved, root, context.caseInsensitivePaths));
-      if (!inside) {
-        return false;
-      }
+      runCwd = realpathSync(candidate);
     } catch {
-      // File doesn't exist - can't resolve, skip
+      runCwd = candidate;
     }
+  }
+
+  const risky = commandReferencesRiskyPath(args.command, {
+    cwd: context.cwd,
+    home: home || "",
+    roots: [context.workspaceRoot, ...context.additionalDirectories],
+    caseInsensitive: context.caseInsensitivePaths,
+    runCwd,
+  });
+  if (risky) {
+    return false;
   }
   return true;
 };

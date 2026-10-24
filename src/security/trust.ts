@@ -246,12 +246,17 @@ export const trustDirectory = async (options: {
 }): Promise<Result<void, FlowError>> => {
   const resolved = await resolveDirectory(options.directory);
   const store = await readTrustStore(options.home);
-
-  if (store.directories.some((entry) => samePath(entry, resolved))) {
-    return ok(undefined);
-  }
-
   const fingerprint = await fingerprintDirectory(options.directory);
+
+  const existing = store.directories.find((entry) => samePath(entry, resolved));
+  if (existing !== undefined) {
+    // Update the fingerprint so a re-approval records the new state.
+    return writeTrustStore(options.home, {
+      version: TRUST_STORE_VERSION,
+      directories: [...store.directories],
+      fingerprints: { ...(store.fingerprints ?? {}), [resolved]: fingerprint },
+    });
+  }
 
   return writeTrustStore(options.home, {
     version: TRUST_STORE_VERSION,

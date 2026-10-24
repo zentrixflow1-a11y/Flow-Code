@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { isIP } from "node:net";
+import { lookup } from "node:dns/promises";
 import { flowError } from "../errors.js";
 import { capOutput } from "../util/text.js";
 import { applyGuard } from "./guard.js";
@@ -65,7 +66,24 @@ const isPrivateHost = (hostname: string): boolean => {
   return false;
 };
 
-/** The arguments of {@link webFetchTool}. */
+const checkHost = async (hostname: string): Promise<string | null> => {
+  const cleaned = hostname.replace(/^\[|\]$/g, "");
+  if (isPrivateHost(cleaned)) {
+    return cleaned;
+  }
+  // Resolve and check every address.
+  try {
+    const addresses = await lookup(cleaned, { all: true });
+    for (const addr of addresses) {
+      if (isPrivateHost(addr.address)) {
+        return addr.address;
+      }
+    }
+  } catch {
+    // DNS failure - let fetch handle it.
+  }
+  return null;
+};
 const webFetchArgs = z.object({
   url: z.string().min(1).describe("The URL to fetch. Must be http or https."),
   format: z
@@ -125,12 +143,25 @@ export const webFetchTool: ToolDefinition<z.infer<typeof webFetchArgs>> = {
       };
     }
 
-    if (BLOCKED_HOSTS.includes(url.hostname.toLowerCase()) || isPrivateHost(url.hostname)) {
+    if (BLOCKED_HOSTS.includes(url.hostname.toLowerCase()) || isPrivateHost(url.hostname.replace(/^\[|\]$/g, ""))) {
       return {
         ok: false,
         error: flowError(
           "permission_denied",
           `'${url.hostname}' is a private or metadata endpoint and is not fetched.`,
+          { retryable: false },
+        ),
+      };
+    }
+
+    // Resolve the hostname and check every address.
+    const blocked = await checkHost(url.hostname);
+    if (blocked !== null) {
+      return {
+        ok: false,
+        error: flowError(
+          "permission_denied",
+          `'${blocked}' is a private or metadata endpoint and is not fetched.`,
           { retryable: false },
         ),
       };
@@ -169,12 +200,23 @@ export const webFetchTool: ToolDefinition<z.infer<typeof webFetchArgs>> = {
             }),
           };
         }
-        if (BLOCKED_HOSTS.includes(next.hostname.toLowerCase()) || isPrivateHost(next.hostname)) {
+        if (BLOCKED_HOSTS.includes(next.hostname.toLowerCase()) || isPrivateHost(next.hostname.replace(/^\[|\]$/g, ""))) {
           return {
             ok: false,
             error: flowError(
               "permission_denied",
               `'${next.hostname}' is a private or metadata endpoint and is not fetched.`,
+              { retryable: false },
+            ),
+          };
+        }
+        const redirectBlocked = await checkHost(next.hostname);
+        if (redirectBlocked !== null) {
+          return {
+            ok: false,
+            error: flowError(
+              "permission_denied",
+              `'${redirectBlocked}' is a private or metadata endpoint and is not fetched.`,
               { retryable: false },
             ),
           };
