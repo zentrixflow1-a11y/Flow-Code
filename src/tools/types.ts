@@ -40,6 +40,8 @@ export interface ToolContext {
   readonly redact: (text: string) => string;
   /** The host platform. */
   readonly platform: NodeJS.Platform;
+  /** Whether the web tools are allowed. */
+  readonly webEnabled?: boolean;
   /**
    * The shell commands run in, when the user asked for one.
    *

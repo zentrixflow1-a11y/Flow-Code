@@ -143,6 +143,15 @@ export const runDoctor = async (options: DoctorOptions): Promise<number> => {
   });
 
   checks.push({
+    name: "Sandbox",
+    ok: true,
+    detail:
+      config.security.sandbox === "off"
+        ? "off — commands are not confined. Set security.sandbox to \"auto\" to turn it on"
+        : `auto — ${config.security.sandbox === "auto" ? "used when available" : config.security.sandbox}`,
+  });
+
+  checks.push({
     name: "Sessions",
     ok: true,
     detail: `stored in ${join(home, ".flowcode", "sessions")}`,

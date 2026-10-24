@@ -71,11 +71,20 @@ export const BUILT_IN_TOOLS: readonly ToolDefinition<unknown>[] = [
  * Build a registry holding every built-in tool.
  *
  * The registry is created fresh each time, so a session can add or replace
- * tools without affecting another.
+ * tools without affecting another. `web_fetch` is only registered when the
+ * user has enabled it, so a configuration that says it is off is honoured
+ * rather than merely advertised.
+ *
+ * @param options - Which optional tools to include.
  */
-export const createDefaultRegistry = (): ToolRegistry => {
+export const createDefaultRegistry = (options: {
+  readonly webEnabled?: boolean;
+} = {}): ToolRegistry => {
   const registry = new ToolRegistry();
   for (const tool of BUILT_IN_TOOLS) {
+    if (tool.name === "web_fetch" && options.webEnabled !== true) {
+      continue;
+    }
     registry.register(tool);
   }
   return registry;

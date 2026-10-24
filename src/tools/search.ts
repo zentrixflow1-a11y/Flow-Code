@@ -10,7 +10,7 @@ import { join, relative, sep } from "node:path";
 import { z } from "zod";
 import { flowError } from "../errors.js";
 import { matchPath } from "../util/glob.js";
-import { isSensitivePath, toPosix } from "../util/paths.js";
+import { isInside, isSensitivePath, toPosix } from "../util/paths.js";
 import { resolveToolPath } from "./fs.js";
 import { refuseSensitivePath } from "./sensitive.js";
 import type { ToolDefinition, ToolResult } from "./types.js";
@@ -131,8 +131,33 @@ export const globFilesTool: ToolDefinition<z.infer<typeof globFilesArgs>> = {
 
     const root = resolved.value;
     const limit = args.max_results ?? DEFAULT_MAX_RESULTS;
+
+    // The pattern must not be able to leave the workspace: a prefix such as
+    // `../` or an absolute path would walk somewhere the user did not open.
     const prefix = literalPrefix(args.pattern);
+    if (prefix.includes("..") || prefix.startsWith("/") || /^[A-Za-z]:/.test(prefix)) {
+      return {
+        ok: false,
+        error: flowError("permission_denied", "The pattern leaves the workspace.", {
+          retryable: false,
+          remediation: "Use a pattern that stays inside the workspace.",
+        }),
+      };
+    }
+
     const searchRoot = prefix === "" ? root : join(root, prefix);
+
+    // The derived root is checked again, so a pattern that slips past the
+    // prefix check cannot walk out either.
+    if (!isInside(searchRoot, root, context.caseInsensitivePaths)) {
+      return {
+        ok: false,
+        error: flowError("permission_denied", "The pattern leaves the workspace.", {
+          retryable: false,
+          remediation: "Use a pattern that stays inside the workspace.",
+        }),
+      };
+    }
 
     const files = await walkFiles(searchRoot, { maxDepth: 20, skip: SKIPPED_DIRECTORIES });
     const matches = files

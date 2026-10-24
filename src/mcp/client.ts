@@ -82,7 +82,12 @@ export const connectServer = async (
         new StdioClientTransport({
           command: config.command,
           ...(config.args === undefined ? {} : { args: [...config.args] }),
-          ...(config.env === undefined ? {} : { env: { ...config.env } }),
+          env: Object.assign(
+            {},
+            ...Object.keys(process.env).map((key) => ({ [key]: process.env[key] ?? "" })),
+            options.env ?? {},
+            config.env ?? {},
+          ),
           cwd: config.cwd ?? options.cwd,
         }),
       );

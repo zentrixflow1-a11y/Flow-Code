@@ -88,6 +88,15 @@ export interface AgentOptions {
   readonly toolSchemaBudget?: number;
   /** Cancels the run. */
   readonly signal?: AbortSignal;
+  /**
+   * Remember a permission rule, when the user asked for it to be remembered.
+   *
+   * The host provides this, because only it knows where to save the rule.
+   */
+  readonly rememberRule?: (
+    rule: string,
+    bucket: "allow" | "deny",
+  ) => Promise<void>;
   /** The most turns to run before stopping. */
   readonly maxTurns?: number;
 }

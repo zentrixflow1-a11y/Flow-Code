@@ -28,7 +28,7 @@ registry at install time. Their license texts are not reproduced here.
 | `react` | MIT | Component model used by Ink |
 | `zod` | MIT | Tool input validation and JSON Schema generation |
 | `diff` | BSD-3-Clause | Unified diff rendering for file edits |
-| `@modelcontextprotocol/client` | MIT | Model Context Protocol client |
+| `@modelcontextprotocol/client` | Apache-2.0 | Model Context Protocol client |
 
 Run `npm ls --all` for the full transitive dependency tree. Each package's own
 `LICENSE` file in `node_modules/` is the authoritative license text.

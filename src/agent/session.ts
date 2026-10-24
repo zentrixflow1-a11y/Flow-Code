@@ -133,7 +133,7 @@ export class FlowSession {
     this.config = config;
     this.provider = provider;
     this.log = log;
-    this.registry = createDefaultRegistry();
+    this.registry = createDefaultRegistry({ webEnabled: config.webEnabled });
     this.rules = effectiveRules(config);
     this.#ui = options.ui ?? silentUi;
     this.#resolvedCwd = options.cwd;
@@ -351,6 +351,7 @@ export class FlowSession {
       secrets,
       platform: process.platform,
       caseInsensitivePaths: process.platform === "win32",
+      webEnabled: this.config.webEnabled,
       ...(this.config.shell === undefined ? {} : { shell: this.config.shell }),
       registry: this.registry,
       guard: this.#guard,
@@ -465,6 +466,9 @@ export class FlowSession {
       ui: this.#ui,
       ...(this.hooks.length === 0 ? {} : { hooks: this.hooks }),
       toolSchemaBudget: this.config.tools.maxToolSchemaBytes,
+      rememberRule: async (rule, bucket) => {
+        await this.rememberRule(rule, bucket);
+      },
       ...(instructions === "" ? {} : { extraInstructions: instructions }),
       ...(this.#options.signal === undefined ? {} : { signal: this.#options.signal }),
       ...(this.#options.maxTurns === undefined ? {} : { maxTurns: this.#options.maxTurns }),
@@ -589,6 +593,13 @@ export class FlowSession {
         return text;
       },
     });
+
+    // Nothing was dropped, so there is nothing to record: appending a
+    // compaction with an empty summary would wipe the conversation on
+    // replay, because the summary replaces everything before it.
+    if (result.droppedMessages === 0) {
+      return "There is nothing to compact yet.";
+    }
 
     await this.log.append({
       type: "compaction.end",
@@ -832,9 +843,10 @@ const buildOverrides = (
     return undefined;
   }
 
-  const provider: NonNullable<ConfigLayer["provider"]> = {
-    provider: overrides.provider ?? "ollama",
-  };
+  const provider: NonNullable<ConfigLayer["provider"]> = {};
+  if (overrides.provider !== undefined) {
+    provider.provider = overrides.provider;
+  }
   if (overrides.model !== undefined) {
     provider.model = overrides.model;
   }
@@ -842,7 +854,10 @@ const buildOverrides = (
     provider.baseUrl = overrides.baseUrl;
   }
 
-  const layer: ConfigLayer = { provider };
+  const layer: ConfigLayer = {};
+  if (Object.keys(provider).length > 0) {
+    layer.provider = provider;
+  }
 
   if (overrides.permissionMode !== undefined) {
     layer.permissions = {
@@ -854,7 +869,7 @@ const buildOverrides = (
     };
   }
 
-  return layer;
+  return Object.keys(layer).length > 0 ? layer : undefined;
 };
 
 export type { ApprovalDecision };

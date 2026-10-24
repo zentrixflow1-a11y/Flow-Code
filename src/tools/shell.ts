@@ -7,9 +7,6 @@
  * reported so nothing is silently lost.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { z } from "zod";
 import { flowError } from "../errors.js";
 import { capOutput } from "../util/text.js";
@@ -208,7 +205,7 @@ interface Invocation {
 
 /** Run a command until it finishes or times out. */
 const runToCompletion = async (
-  command: string,
+  _command: string,
   cwd: string,
   invocation: Invocation,
   context: ToolContext,
@@ -260,12 +257,8 @@ const runToCompletion = async (
 
   const durationMs = Date.now() - startedAt;
 
-  // Keep the whole output in a file so nothing is lost to the cap.
-  let outputFile: string | undefined;
-  if (stdout.length + stderr.length > MAX_STREAM_BYTES) {
-    outputFile = await saveOutput(command, stdout, stderr);
-  }
-
+  // The whole output is not kept: only the first 200 KB per stream. Say so
+  // honestly rather than writing a partial copy to a temporary file.
   return {
     stdout,
     stderr,
@@ -273,7 +266,6 @@ const runToCompletion = async (
     signal: exit.signal,
     durationMs,
     timedOut,
-    ...(outputFile === undefined ? {} : { outputFile }),
   };
 };
 
@@ -349,6 +341,10 @@ const formatOutcome = (outcome: CommandOutcome): string => {
   }
   if (outcome.outputFile !== undefined) {
     parts.push(`(the full output was saved to ${outcome.outputFile})`);
+  } else if (outcome.stdout.length + outcome.stderr.length > MAX_STREAM_BYTES) {
+    parts.push(
+      "(output after the first 200 KB was discarded; raise the limit or redirect to a file)",
+    );
   }
 
   const status =
@@ -358,18 +354,6 @@ const formatOutcome = (outcome: CommandOutcome): string => {
   parts.push(`[${status} in ${outcome.durationMs}ms]`);
 
   return parts.join("\n");
-};
-
-/** Write a command's full output to a temporary file. */
-const saveOutput = async (
-  command: string,
-  stdout: string,
-  stderr: string,
-): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), "flowcode-output-"));
-  const path = join(directory, "output.txt");
-  await writeFile(path, `$ ${command}\n\n--- stdout ---\n${stdout}\n\n--- stderr ---\n${stderr}`, "utf8");
-  return path;
 };
 
 /** Kill a process and everything it started. */

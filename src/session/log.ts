@@ -48,6 +48,7 @@ export class SessionLog {
   #seq = 0;
   #closed = false;
   #queue: Promise<void> = Promise.resolve();
+  #failedWrites = 0;
 
   private constructor(
     path: string,
@@ -57,6 +58,11 @@ export class SessionLog {
     this.#path = path;
     this.#header = header;
     this.#redact = redact;
+  }
+
+  /** How many writes failed since the log was opened. */
+  get failedWrites(): number {
+    return this.#failedWrites;
   }
 
   /**
@@ -166,10 +172,16 @@ export class SessionLog {
     this.#events.push({ type: event.type, data } as SessionEvent);
 
     this.#queue = this.#queue.then(async () => {
-      await appendFile(this.#path, `${JSON.stringify(stored)}\n`, {
-        encoding: "utf8",
-        mode: SESSION_LOG_MODE,
-      });
+      try {
+        await appendFile(this.#path, `${JSON.stringify(stored)}\n`, {
+          encoding: "utf8",
+          mode: SESSION_LOG_MODE,
+        });
+      } catch {
+        // A write that fails must not poison the queue: later events still
+        // need to reach the disk, and the failure is counted.
+        this.#failedWrites += 1;
+      }
     });
 
     return this.#queue;

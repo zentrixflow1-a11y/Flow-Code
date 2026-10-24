@@ -23,6 +23,36 @@ const BLOCKED_HOSTS: readonly string[] = [
   "metadata.goog",
 ];
 
+/** Whether a hostname resolves to a private or loopback address. */
+const isPrivateHost = (hostname: string): boolean => {
+  const lowered = hostname.toLowerCase();
+  // localhost is the machine itself: fetching it is not an SSRF, and local
+  // development depends on it.
+  if (lowered === "localhost" || lowered === "::1" || lowered.endsWith(".localhost")) {
+    return false;
+  }
+  if (lowered === "127.0.0.1") {
+    return false;
+  }
+  if (/^127\./.test(lowered) || /^10\./.test(lowered) || /^192\.168\./.test(lowered)) {
+    return true;
+  }
+  const match172 = /^172\.(\d+)\./.exec(lowered);
+  if (match172 !== null) {
+    const octet = Number(match172[1]);
+    if (octet >= 16 && octet <= 31) {
+      return true;
+    }
+  }
+  if (/^169\.254\./.test(lowered)) {
+    return true;
+  }
+  if (/^fc00:|^fd/.test(lowered)) {
+    return true;
+  }
+  return false;
+};
+
 /** The arguments of {@link webFetchTool}. */
 const webFetchArgs = z.object({
   url: z.string().min(1).describe("The URL to fetch. Must be http or https."),
@@ -50,6 +80,16 @@ export const webFetchTool: ToolDefinition<z.infer<typeof webFetchArgs>> = {
       return { ok: false, error: guard.error };
     }
 
+    if (context.webEnabled !== true) {
+      return {
+        ok: false,
+        error: flowError("permission_denied", "The web tools are not enabled.", {
+          retryable: false,
+          remediation: "Set `webEnabled` to true in the configuration file.",
+        }),
+      };
+    }
+
     let url: URL;
     try {
       url = new URL(args.url);
@@ -73,12 +113,12 @@ export const webFetchTool: ToolDefinition<z.infer<typeof webFetchArgs>> = {
       };
     }
 
-    if (BLOCKED_HOSTS.includes(url.hostname.toLowerCase())) {
+    if (BLOCKED_HOSTS.includes(url.hostname.toLowerCase()) || isPrivateHost(url.hostname)) {
       return {
         ok: false,
         error: flowError(
           "permission_denied",
-          `'${url.hostname}' is a cloud metadata endpoint and is not fetched.`,
+          `'${url.hostname}' is a private or metadata endpoint and is not fetched.`,
           { retryable: false },
         ),
       };
@@ -90,34 +130,94 @@ export const webFetchTool: ToolDefinition<z.infer<typeof webFetchArgs>> = {
     try {
       const response = await fetch(url, {
         signal: controller.signal,
-        redirect: "follow",
+        redirect: "manual",
         headers: { accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5" },
       });
 
-      if (!response.ok) {
+      // Follow redirects by hand, so each hop is checked against the blocklist.
+      let final = response;
+      let current = url;
+      let hops = 0;
+      while (final.status >= 300 && final.status < 400 && hops < 5) {
+        const location = final.headers.get("location");
+        if (location === null) {
+          break;
+        }
+        let next: URL;
+        try {
+          next = new URL(location, current);
+        } catch {
+          break;
+        }
+        if (next.protocol !== "http:" && next.protocol !== "https:") {
+          return {
+            ok: false,
+            error: flowError("invalid_request", `'${next.protocol}' URLs cannot be fetched.`, {
+              retryable: false,
+            }),
+          };
+        }
+        if (BLOCKED_HOSTS.includes(next.hostname.toLowerCase()) || isPrivateHost(next.hostname)) {
+          return {
+            ok: false,
+            error: flowError(
+              "permission_denied",
+              `'${next.hostname}' is a private or metadata endpoint and is not fetched.`,
+              { retryable: false },
+            ),
+          };
+        }
+        current = next;
+        final = await fetch(next, {
+          signal: controller.signal,
+          redirect: "manual",
+          headers: { accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5" },
+        });
+        hops += 1;
+      }
+
+      if (!final.ok) {
         return {
           ok: false,
-          error: flowError("server_error", `The server returned ${response.status}.`, {
-            retryable: response.status >= 500,
-            status: response.status,
+          error: flowError("server_error", `The server returned ${final.status}.`, {
+            retryable: final.status >= 500,
+            status: final.status,
           }),
         };
       }
 
-      const contentType = response.headers.get("content-type") ?? "";
-      const body = await response.text();
-
-      if (body.length > MAX_RESPONSE_BYTES) {
+      const contentType = final.headers.get("content-type") ?? "";
+      const reader = final.body?.getReader();
+      if (reader === undefined) {
         return {
           ok: false,
-          error: flowError(
-            "resource_constraint",
-            `The page is ${body.length} characters, which is larger than the limit.`,
-            { retryable: false },
-          ),
+          error: flowError("malformed_response", "The provider returned an empty response body.", {
+            retryable: true,
+          }),
         };
       }
 
+      let body = "";
+      let bytes = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        bytes += value.byteLength;
+        if (bytes > MAX_RESPONSE_BYTES) {
+          reader.cancel();
+          return {
+            ok: false,
+            error: flowError(
+              "resource_constraint",
+              `The page is larger than the ${MAX_RESPONSE_BYTES}-byte limit.`,
+              { retryable: false },
+            ),
+          };
+        }
+        body += new TextDecoder().decode(value, { stream: true });
+      }
       const format = args.format ?? "text";
       const content =
         format === "html"
@@ -129,16 +229,16 @@ export const webFetchTool: ToolDefinition<z.infer<typeof webFetchArgs>> = {
       return {
         ok: true,
         output: capOutput(content).text,
-        data: { url: url.href, contentType, characters: body.length },
+        data: { url: `${url.protocol}//${url.host}${url.pathname}`, contentType, characters: body.length },
       };
     } catch (error) {
       return {
         ok: false,
-        error: flowError(
-          "network_error",
-          `Could not fetch '${args.url}': ${error instanceof Error ? error.message : String(error)}`,
-          { retryable: true, cause: error },
-        ),
+          error: flowError(
+            "network_error",
+            `Could not fetch '${url.protocol}//${url.host}${url.pathname}': ${error instanceof Error ? error.message : String(error)}`,
+            { retryable: true, cause: error },
+          ),
       };
     } finally {
       clearTimeout(timer);

@@ -38,14 +38,19 @@ export const deriveMessages = (events: readonly SessionEvent[]): ChatMessage[] =
   for (const event of events) {
     switch (event.type) {
       case "user.message":
-        messages.push({ role: "user", content: event.data.text });
+        if (typeof event.data?.text === "string") {
+          messages.push({ role: "user", content: event.data.text });
+        }
         break;
 
       case "assistant.message": {
-        const toolCalls = event.data.toolCalls;
+        const text = typeof event.data?.text === "string" ? event.data.text : "";
+        const toolCalls = Array.isArray(event.data?.toolCalls)
+          ? (event.data.toolCalls as ToolCall[])
+          : [];
         messages.push({
           role: "assistant",
-          content: event.data.text,
+          content: text,
           ...(toolCalls.length === 0 ? {} : { toolCalls }),
         });
 
@@ -64,19 +69,30 @@ export const deriveMessages = (events: readonly SessionEvent[]): ChatMessage[] =
       }
 
       case "tool.result":
-        messages.push({
-          role: "tool",
-          content: event.data.output,
-          toolCallId: event.data.id,
-        });
+        if (typeof event.data?.id === "string") {
+          messages.push({
+            role: "tool",
+            content: typeof event.data.output === "string" ? event.data.output : "",
+            toolCallId: event.data.id,
+            ...(typeof (event.data as unknown as { name?: unknown }).name === "string"
+              ? { name: (event.data as unknown as { name: string }).name }
+              : {}),
+          });
+        }
         break;
 
-      case "compaction.end":
-        // Everything before the compaction is replaced by the summary. The log
-        // itself is never rewritten; the view is what changes.
+      case "compaction.end": {
+        // A compaction that dropped nothing must not wipe the conversation:
+        // the summary replaces everything before it, and an empty summary
+        // would leave the model with nothing.
+        const summary = event.data.summary;
+        if (typeof summary !== "string" || summary.trim() === "") {
+          break;
+        }
         messages.length = 0;
-        messages.push(buildSummaryMessage(event.data.summary));
+        messages.push(buildSummaryMessage(summary));
         break;
+      }
 
       default:
         break;

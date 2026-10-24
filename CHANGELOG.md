@@ -127,6 +127,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user's own configuration, the environment and the command line. An API key
   is never sent to an endpoint the user's own configuration did not choose.
 
+### Fixed (second round)
+
+- **`/compact` wiped the conversation.** When there was nothing to drop, the
+  compaction still appended an empty summary, and on replay the summary
+  replaced everything before it. A compaction that drops nothing is a no-op now.
+- **A missing `--provider` forced the `ollama` preset.** The overrides
+  replaced rather than merged, so the configured provider was lost.
+- **A failed log write poisoned the queue.** One rejected `appendFile`
+  rejected every later write too. Each write is caught on its own now.
+- **`webEnabled` was a dead switch.** `web_fetch` was registered
+  unconditionally. It is registered only when enabled now.
+- **`glob_files` could walk out of the workspace.** A pattern such as
+  `../**` enumerated the parent directory. Such patterns are refused now.
+- **`writeFileAtomically` used a predictable temp name.** It uses a random
+  name and exclusive creation now.
+- **Shell output was saved unredacted and incompletely.** The misleading
+  file is gone; truncation is stated plainly.
+- **`web_fetch` did not block private addresses.** Loopback, private ranges
+  and the metadata endpoint are refused now.
+- **MCP servers had no timeout and ignored the environment.** The
+  environment is merged now.
+- **`deriveMessages` crashed on a null event.** Malformed events are
+  skipped now.
+- **"Allow always" never persisted.** It is persisted now.
+- **URL credentials reached error messages.** Userinfo is stripped now.
+- **`write_file` and `edit_file` had no size cap.** Content is capped now.
+- **The `NOTICE` listed the wrong license.** `@modelcontextprotocol/client`
+  is Apache-2.0.
+- **The README and CHANGELOG had single-code-point mojibake.** Fixed.
+- **The README said `cd flow-code`.** It says `cd Flow-Code` now.
+- **The README overstated sandbox parity.** The differences are listed now.
+- **Trust was not re-checked after a pull.** A note was added.
+- **`doctor` did not report the sandbox.** It does now.
+
 ### Changed
 
 - **The project's instructions reach the model.** `FLOWCODE.md` was read and
@@ -325,7 +359,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **The agent loop** (`src/agent/loop.ts`): turn ’ model ’ tools ’ repeat, with
+- **The agent loop** (`src/agent/loop.ts`): turn → model → tools → repeat, with
   cancellation, a turn limit, and a batch that contains a tool which is not
   concurrency-safe running entirely in order.
 - **The session object** (`src/agent/session.ts`): owns the configuration, the

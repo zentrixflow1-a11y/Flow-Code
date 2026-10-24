@@ -11,9 +11,7 @@ import {
   mkdir,
   readFile,
   readdir,
-  rename,
   stat,
-  writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { z } from "zod";
@@ -32,6 +30,9 @@ import type { ToolContext, ToolDefinition, ToolResult } from "./types.js";
 
 /** The largest file the tools will read as text. */
 const MAX_READ_BYTES = 1_000_000;
+
+/** The largest file the tools will write. */
+const MAX_WRITE_BYTES = 1_000_000;
 
 /**
  * Resolve a path for a tool, refusing anything outside the workspace.
@@ -214,6 +215,17 @@ export const writeFileTool: ToolDefinition<z.infer<typeof writeFileArgs>> = {
       return { ok: false, error: refuseProtectedWrite(path) };
     }
 
+    if (args.content.length > MAX_WRITE_BYTES) {
+      return {
+        ok: false,
+        error: flowError(
+          "resource_constraint",
+          `The content is ${args.content.length} characters, which is larger than the ${MAX_WRITE_BYTES}-character limit.`,
+          { retryable: false },
+        ),
+      };
+    }
+
     const previous = await readFile(path, "utf8").catch(() => undefined);
 
     await mkdir(dirname(path), { recursive: true });
@@ -272,6 +284,17 @@ export const editFileTool: ToolDefinition<z.infer<typeof editFileArgs>> = {
     const path = resolved.value;
     if (isProtectedPath(path) || isSensitivePath(path)) {
       return { ok: false, error: refuseProtectedWrite(path) };
+    }
+
+    if (args.new_text.length > MAX_WRITE_BYTES) {
+      return {
+        ok: false,
+        error: flowError(
+          "resource_constraint",
+          `The replacement text is ${args.new_text.length} characters, which is larger than the ${MAX_WRITE_BYTES}-character limit.`,
+          { retryable: false },
+        ),
+      };
     }
 
     const original = await readFile(path, "utf8").catch(() => undefined);
@@ -412,11 +435,22 @@ export const writeFileAtomically = async (
   path: string,
   content: string,
 ): Promise<void> => {
-  const temporary = `${path}.flowcode-${process.pid}-${Date.now()}.tmp`;
+  const { randomUUID } = await import("node:crypto");
+  const { open } = await import("node:fs/promises");
+  const temporary = `${path}.flowcode-${process.pid}-${randomUUID()}.tmp`;
+
+  let handle;
   try {
-    await writeFile(temporary, content, "utf8");
+    handle = await open(temporary, "wx", 0o600);
+    await handle.writeFile(content, "utf8");
+    await handle.close();
+    handle = undefined;
+    const { rename } = await import("node:fs/promises");
     await rename(temporary, path);
   } catch (error) {
+    if (handle !== undefined) {
+      await handle.close().catch(() => undefined);
+    }
     await import("node:fs/promises").then((fs) =>
       fs.unlink(temporary).catch(() => undefined),
     );

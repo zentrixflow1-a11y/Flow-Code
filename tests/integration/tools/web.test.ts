@@ -62,6 +62,7 @@ describe("the web tool", () => {
         redact: (text) => text,
         platform: process.platform,
         caseInsensitivePaths: process.platform === "win32",
+        webEnabled: true,
         guard: () => undefined,
       },
     );
@@ -84,6 +85,7 @@ describe("the web tool", () => {
         redact: (text) => text,
         platform: process.platform,
         caseInsensitivePaths: false,
+        webEnabled: true,
         guard: () => undefined,
       },
     );
@@ -105,6 +107,7 @@ describe("the web tool", () => {
         redact: (text) => text,
         platform: process.platform,
         caseInsensitivePaths: false,
+        webEnabled: true,
         guard: () => undefined,
       },
     );

@@ -310,6 +310,15 @@ const runToolCall = async (
         type: "approval.decided",
         data: { tool: call.name, decision: approval.kind },
       });
+      // A refusal that is meant to be remembered is persisted, so the next
+      // call does not have to be refused by hand.
+      if (approval.kind === "deny_always") {
+        const subject = computeSubject(definition, call);
+        const rule = subject === undefined ? call.name : `${call.name}:${subject}`;
+        if (options.rememberRule !== undefined) {
+          await options.rememberRule(rule, "deny");
+        }
+      }
       return {
         ok: false,
         error: flowError(
@@ -326,6 +335,15 @@ const runToolCall = async (
       type: "approval.decided",
       data: { tool: call.name, decision: approval.kind },
     });
+    // An approval that is meant to be remembered is persisted, so the next
+    // call does not have to be approved by hand.
+    if (approval.kind === "allow_always") {
+      const subject = computeSubject(definition, call);
+      const rule = subject === undefined ? call.name : `${call.name}:${subject}`;
+      if (options.rememberRule !== undefined) {
+        await options.rememberRule(rule, "allow");
+      }
+    }
   }
 
   const before = await runHooks(options, "pre_tool_use", call);

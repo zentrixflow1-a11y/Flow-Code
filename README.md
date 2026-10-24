@@ -115,7 +115,7 @@ From a checkout:
 
 ```bash
 git clone https://github.com/zentrixflow1-a11y/Flow-Code.git
-cd flow-code
+cd Flow-Code
 npm install
 npm run build
 node dist/cli.js
@@ -528,7 +528,10 @@ to get one — and on macOS and Linux the sandbox is only used when one is
 actually installed.
 
 The sandbox confines **writes**. It does not cut the network: a command that
-needs to fetch something still can, on both platforms.
+needs to fetch something still can, on both platforms. The two mechanisms
+also differ in detail: Seatbelt denies all writes except the roots, while
+bubblewrap mounts a writable `/tmp` and unshares process, IPC, UTS and
+cgroup namespaces. Neither is a full container.
 
 So: the honest summary is that a command is *asked about*, not *confined*,
 unless you turn the sandbox on.
@@ -564,6 +567,11 @@ offers:
 
 A refusal is a decision, not an obstacle. Flow Code tells the agent it was
 refused, and the agent is expected to work within what is allowed.
+
+Trust is bound to the directory, not to its contents. A `git pull` that
+changes `hooks.json`, `mcp.json`, the agents or the instructions in a
+trusted directory does not trigger a new question, so re-check those files
+after pulling in a trusted repository.
 
 ---
 
@@ -849,7 +857,7 @@ diagnostic output is plain ASCII for exactly this reason.
 
 ```bash
 git clone https://github.com/zentrixflow1-a11y/Flow-Code.git
-cd flow-code
+cd Flow-Code
 npm install
 npm run check
 ```
@@ -870,7 +878,7 @@ it. Nothing here requires you to continue calling it Flow Code.
 See [`NOTICE`](./NOTICE) for the full statement and the third-party
 attribution.
 
-Flow Code is licensed under the [MIT Licence](./LICENSE) é The Flow Code
+Flow Code is licensed under the [MIT Licence](./LICENSE) — The Flow Code
 Authors.
 
 Flow Code is an original implementation. It contains no source code, system

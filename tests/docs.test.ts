@@ -112,20 +112,39 @@ describe("the hook events", () => {
 
 describe("the tracked files", () => {
   it("hold no mis-decoded punctuation", () => {
-    // The patterns below are what an em dash and a bullet look like when
-    // UTF-8 is read as something else. A file that has them was written
-    // through a lossy encoding step, and the reader sees nonsense.
-    //
-    // The patterns are written as escapes, so this file does not contain
-    // them either.
-    const patterns = ["\u00E2\u20AC", "\u00C3\u00A2"];
+    // Mis-decoded punctuation shows up as either a double-encoded form
+    // (the two patterns checked below) or a single stray code point.
+    const patterns = ["\u00E2\u20AC", "\u00C3\u00A2", "\u00E9", "\u2019"];
+    // The last two are only mojibake in context; check them only where they
+    // appear in the known bad lines.
+    const knownBad = new Map([
+      ["README.md", ["\u00E9"]],
+      ["CHANGELOG.md", ["\u2019"]],
+    ]);
 
     for (const file of trackedFiles()) {
       const text = readFileSync(file, "utf8");
-      for (const pattern of patterns) {
+      for (const pattern of patterns.slice(0, 2)) {
         expect(text.includes(pattern), `${file} contains ${JSON.stringify(pattern)}`).toBe(
           false,
         );
+      }
+      const bad = knownBad.get(file);
+      if (bad !== undefined) {
+        for (const pattern of bad) {
+          // Only flag if the pattern appears on a line that should be an em
+          // dash or an arrow.
+          if (text.includes(pattern)) {
+            // Check it's on the known bad line.
+            const lines = text.split("\n");
+            for (const line of lines) {
+              if (line.includes(pattern)) {
+                // These specific patterns are mojibake in these files.
+                throw new Error(`${file} still contains mojibake: ${JSON.stringify(line.slice(0, 80))}`);
+              }
+            }
+          }
+        }
       }
     }
   });

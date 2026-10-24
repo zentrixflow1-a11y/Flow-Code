@@ -34,6 +34,8 @@ export interface ToolContextOptions {
   readonly signal?: AbortSignal;
   /** The host platform. */
   readonly platform?: NodeJS.Platform;
+  /** Whether the web tools are allowed. */
+  readonly webEnabled?: boolean;
   /**
    * The shell commands run in, when the user asked for one.
    *
@@ -93,6 +95,7 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => (
   platform: options.platform ?? process.platform,
   caseInsensitivePaths:
     options.caseInsensitivePaths ?? process.platform === "win32",
+  ...(options.webEnabled === undefined ? {} : { webEnabled: options.webEnabled }),
   ...(options.shell === undefined ? {} : { shell: options.shell }),
   guard: options.guard,
   ...(options.signal === undefined ? {} : { signal: options.signal }),
