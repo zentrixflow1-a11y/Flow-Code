@@ -25,7 +25,18 @@ const escapeRegExp = (text: string): string =>
  */
 const segmentToRegExp = (segment: string): string => {
   let out = "";
-  for (const character of segment) {
+  let i = 0;
+  while (i < segment.length) {
+    const character = segment[i] as string;
+    if (character === "\\") {
+      // Backslash escapes the next character.
+      const next = segment[i + 1];
+      if (next !== undefined) {
+        out += escapeRegExp(next);
+        i += 2;
+        continue;
+      }
+    }
     if (character === "*") {
       out += "[^/]*";
     } else if (character === "?") {
@@ -33,6 +44,7 @@ const segmentToRegExp = (segment: string): string => {
     } else {
       out += escapeRegExp(character);
     }
+    i += 1;
   }
   return out;
 };
@@ -43,7 +55,8 @@ const segmentToRegExp = (segment: string): string => {
  * @param pattern - The glob, using forward slashes.
  */
 export const globToRegExp = (pattern: string): RegExp => {
-  const normalized = pattern.replace(/\\/g, "/");
+  // Backslashes are escapes, not path separators, so they are preserved.
+  const normalized = pattern;
   const segments = normalized.split("/");
 
   let source = "";
@@ -83,8 +96,9 @@ export const matchGlob = (
   subject: string,
   separator = "/",
 ): boolean => {
-  const normalizedSubject = subject.replace(/\\/g, "/");
-  const normalizedPattern = pattern.replace(/\\/g, "/");
+  // Backslashes are escapes, not separators.
+  const normalizedSubject = subject;
+  const normalizedPattern = pattern;
 
   if (isGlob(normalizedPattern)) {
     return globToRegExp(normalizedPattern).test(normalizedSubject);

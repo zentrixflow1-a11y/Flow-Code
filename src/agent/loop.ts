@@ -501,8 +501,8 @@ const decideFor = async (
 };
 
 /** Escape glob metacharacters in a rule subject. */
-const escapeRuleSubject = (subject: string): string =>
-  subject.replace(/[*?[\]]/g, (char) => `\\${char}`);
+export const escapeRuleSubject = (subject: string): string =>
+  subject.replace(/[*?[\]\\]/g, (char) => `\\${char}`);
 const computeSubject = (
   definition: {
     readonly subject?: (args: never) => string | undefined;

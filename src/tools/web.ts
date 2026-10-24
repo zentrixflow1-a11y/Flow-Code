@@ -26,43 +26,123 @@ const BLOCKED_HOSTS: readonly string[] = [
 ];
 
 /** Whether a hostname resolves to a private or loopback address. */
-const isPrivateHost = (hostname: string): boolean => {
-  const cleaned = hostname.replace(/^\[|\]$/g, "");
-  const mapped = /^::ffff:(.+)$/i.exec(cleaned);
-  const address = (mapped !== null ? mapped[1] : cleaned) ?? cleaned;
-  const version = isIP(address);
+const parseIpv6 = (address: string): Uint8Array | null => {
+  const cleaned = address.replace(/^\[|\]$/g, '').toLowerCase().split('%')[0] || '';
+  if (cleaned === '') return null;
 
-  if (version === 0) {
-    const lowered = cleaned.toLowerCase();
-    if (lowered === "localhost" || lowered.endsWith(".localhost")) {
-      return false;
+  let ipv4Tail: string | undefined;
+  let head = cleaned;
+  const lastColon = cleaned.lastIndexOf(':');
+  const lastSegment = cleaned.slice(lastColon + 1);
+  if (lastSegment.includes('.')) {
+    const parts = lastSegment.split('.');
+    if (parts.length !== 4) return null;
+    for (const part of parts) {
+      const n = Number(part);
+      if (!Number.isInteger(n) || n < 0 || n > 255) return null;
     }
-    return false;
+    ipv4Tail = lastSegment;
+    head = cleaned.slice(0, lastColon + 1);
   }
 
+  const doubleColon = head.indexOf('::');
+  let groups: string[];
+  if (doubleColon !== -1) {
+    const left = head.slice(0, doubleColon);
+    const right = head.slice(doubleColon + 2);
+    const leftGroups = left === '' ? [] : left.split(':');
+    const rightGroups = right === '' ? [] : right.split(':');
+    const tailGroups = ipv4Tail !== undefined ? 2 : 0;
+    const needed = 8 - leftGroups.length - rightGroups.length - tailGroups;
+    if (needed < 0) return null;
+    groups = [...leftGroups, ...Array(needed).fill('0'), ...rightGroups];
+  } else {
+    groups = head.split(':');
+  }
+
+  if (ipv4Tail !== undefined) {
+    const parts = ipv4Tail.split('.').map(Number);
+    groups.push(((parts[0] ?? 0) * 256 + (parts[1] ?? 0)).toString(16));
+    groups.push(((parts[2] ?? 0) * 256 + (parts[3] ?? 0)).toString(16));
+  }
+
+  if (groups.length !== 8) return null;
+
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 8; i++) {
+    const g = groups[i];
+    if (g === undefined) return null;
+    const n = parseInt(g, 16);
+    if (isNaN(n) || n < 0 || n > 0xffff) return null;
+    bytes[i * 2] = (n >> 8) & 0xff;
+    bytes[i * 2 + 1] = n & 0xff;
+  }
+  return bytes;
+};
+
+const isPrivateIpv4 = (ip: string): boolean => {
+  if (ip === '127.0.0.1') return false;
+  if (ip === '0.0.0.0') return true;
+  if (/^127\./.test(ip)) return true;
+  if (/^10\./.test(ip)) return true;
+  if (/^192\.168\./.test(ip)) return true;
+  const m172 = /^172\.(\d+)\./.exec(ip);
+  if (m172 !== null) {
+    const o = Number(m172[1]);
+    if (o >= 16 && o <= 31) return true;
+  }
+  if (/^169\.254\./.test(ip)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\./.test(ip)) return true;
+  return false;
+};
+
+const isPrivateHost = (hostname: string): boolean => {
+  const cleaned = hostname.replace(/^\[|\]$/g, '');
+  const lowered = cleaned.toLowerCase();
+
+  if (lowered === 'localhost' || lowered.endsWith('.localhost')) return false;
+
+  const version = isIP(cleaned);
+
   if (version === 4) {
-    if (address === "127.0.0.1") return false;
-    if (address === "0.0.0.0") return true;
-    if (/^127\./.test(address)) return true;
-    if (/^10\./.test(address)) return true;
-    if (/^192\.168\./.test(address)) return true;
-    const m172 = /^172\.(\d+)\./.exec(address);
+    if (cleaned === '127.0.0.1') return false;
+    if (cleaned === '0.0.0.0') return true;
+    if (/^127\./.test(cleaned)) return true;
+    if (/^10\./.test(cleaned)) return true;
+    if (/^192\.168\./.test(cleaned)) return true;
+    const m172 = /^172\.(\d+)\./.exec(cleaned);
     if (m172 !== null) {
       const o = Number(m172[1]);
       if (o >= 16 && o <= 31) return true;
     }
-    if (/^169\.254\./.test(address)) return true;
-    if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\./.test(address)) return true;
+    if (/^169\.254\./.test(cleaned)) return true;
+    if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\./.test(cleaned)) return true;
     return false;
   }
 
-  const lowered = address.toLowerCase();
-  if (lowered === "::1") return false;
-  if (lowered.startsWith("fe80:")) return true;
-  if (/^fc[0-9a-f]{2}:|^fd[0-9a-f]{2}:/.test(lowered)) return true;
-  if (lowered.startsWith("::ffff:")) {
-    return isPrivateHost(lowered.slice(7));
+  if (version === 6 || cleaned.includes(':')) {
+    const bytes = parseIpv6(cleaned);
+    if (bytes === null) return false;
+    if (bytes.every((b) => b === 0)) return true;
+    if (bytes[15] === 1 && bytes.slice(0, 15).every((b) => b === 0)) return false;
+    if (bytes[0]! === 0xfe && (bytes[1]! & 0xc0) === 0x80) return true;
+    if ((bytes[0]! & 0xfe) === 0xfc) return true;
+    if (bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 0 && bytes[3] === 0 &&
+        bytes[4] === 0 && bytes[5] === 0 && bytes[6] === 0 && bytes[7] === 0 &&
+        bytes[8] === 0 && bytes[9] === 0 && bytes[10] === 0xff && bytes[11] === 0xff) {
+      const v4 = bytes[12] + '.' + bytes[13] + '.' + bytes[14] + '.' + bytes[15];
+      return isPrivateIpv4(v4);
+    }
+    if (bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 0 && bytes[3] === 0 &&
+        bytes[4] === 0 && bytes[5] === 0 && bytes[6] === 0 && bytes[7] === 0 &&
+        bytes[8] === 0 && bytes[9] === 0 && bytes[10] === 0 && bytes[11] === 0) {
+      const v4 = bytes[12] + '.' + bytes[13] + '.' + bytes[14] + '.' + bytes[15];
+      if (v4 !== '0.0.0.0') return isPrivateIpv4(v4);
+    }
+    return false;
   }
+
+  if (BLOCKED_HOSTS.includes(lowered)) return true;
   return false;
 };
 
@@ -71,7 +151,6 @@ const checkHost = async (hostname: string): Promise<string | null> => {
   if (isPrivateHost(cleaned)) {
     return cleaned;
   }
-  // Resolve and check every address.
   try {
     const addresses = await lookup(cleaned, { all: true });
     for (const addr of addresses) {
@@ -84,6 +163,7 @@ const checkHost = async (hostname: string): Promise<string | null> => {
   }
   return null;
 };
+
 const webFetchArgs = z.object({
   url: z.string().min(1).describe("The URL to fetch. Must be http or https."),
   format: z

@@ -45,23 +45,47 @@ const FINGERPRINTED_FILES = [
  */
 export const fingerprintDirectory = async (cwd: string): Promise<string> => {
   const hash = createHash("sha256");
+  const files: string[] = [];
+
+  // Collect all fingerprinted files.
   for (const relative of FINGERPRINTED_FILES) {
     const path = join(cwd, ...relative.split("/"));
     const info = await stat(path).catch(() => undefined);
     if (info === undefined) {
-      hash.update(`${relative}:missing\n`);
+      files.push(`${relative}:missing`);
       continue;
     }
     if (info.isDirectory()) {
-      hash.update(`${relative}:dir\n`);
+      // Hash every file inside, sorted by name.
+      const { readdir } = await import("node:fs/promises");
+      const entries = await readdir(path, { recursive: true }).catch(() => []);
+      const sorted = [...entries].sort();
+      for (const entry of sorted) {
+        const fullPath = join(path, entry);
+        const fileInfo = await stat(fullPath).catch(() => undefined);
+        if (fileInfo?.isFile() !== true) continue;
+        try {
+          const text = await readFile(fullPath, "utf8");
+          files.push(`${relative}/${entry}:${text}`);
+        } catch {
+          files.push(`${relative}/${entry}:unreadable`);
+        }
+      }
+      if (sorted.length === 0) {
+        files.push(`${relative}:empty-dir`);
+      }
       continue;
     }
     try {
       const text = await readFile(path, "utf8");
-      hash.update(`${relative}:${text}\n`);
+      files.push(`${relative}:${text}`);
     } catch {
-      hash.update(`${relative}:unreadable\n`);
+      files.push(`${relative}:unreadable`);
     }
+  }
+
+  for (const file of files.sort()) {
+    hash.update(file + "\n");
   }
   return hash.digest("hex");
 };
@@ -225,11 +249,18 @@ export const isTrustedDirectory = async (options: {
   if (entry === undefined) {
     return false;
   }
-  // A directory is trusted for what it contained. If its executable
-  // configuration changed, trust is revoked until the user says yes again.
   const fingerprint = await fingerprintDirectory(options.directory);
   const stored = (store.fingerprints ?? {})[entry];
-  if (stored !== undefined && stored !== fingerprint) {
+  // A v1 store has no fingerprint; record one now.
+  if (stored === undefined) {
+    await writeTrustStore(options.home, {
+      version: TRUST_STORE_VERSION,
+      directories: [...store.directories],
+      fingerprints: { ...(store.fingerprints ?? {}), [resolved]: fingerprint },
+    });
+    return true;
+  }
+  if (stored !== fingerprint) {
     return false;
   }
   return true;
