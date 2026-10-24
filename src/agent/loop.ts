@@ -18,6 +18,8 @@
  * throws — all of them are recorded and the model is told what happened.
  */
 import { flowError, type FlowError } from "../errors.js";
+import { realpathSync } from "node:fs";
+import { isInside, isSensitivePath } from "../util/paths.js";
 import { assembleRequest } from "../context/assembler.js";
 import { buildSystemPrompt } from "../context/system-prompt.js";
 import { decidePermission } from "../permissions/engine.js";
@@ -312,13 +314,13 @@ const runToolCall = async (
       });
       // A refusal that is meant to be remembered is persisted, so the next
       // call does not have to be refused by hand.
-      if (approval.kind === "deny_always") {
-        const subject = computeSubject(definition, call);
-        const rule = subject === undefined ? call.name : `${call.name}:${subject}`;
-        if (options.rememberRule !== undefined) {
-          await options.rememberRule(rule, "deny");
-        }
+    if (approval.kind === "deny_always") {
+      const subject = computeSubject(definition, call);
+      const rule = subject === undefined ? call.name : `${call.name}:${escapeRuleSubject(subject)}`;
+      if (options.rememberRule !== undefined) {
+        await options.rememberRule(rule, "deny");
       }
+    }
       return {
         ok: false,
         error: flowError(
@@ -339,7 +341,7 @@ const runToolCall = async (
     // call does not have to be approved by hand.
     if (approval.kind === "allow_always") {
       const subject = computeSubject(definition, call);
-      const rule = subject === undefined ? call.name : `${call.name}:${subject}`;
+      const rule = subject === undefined ? call.name : `${call.name}:${escapeRuleSubject(subject)}`;
       if (options.rememberRule !== undefined) {
         await options.rememberRule(rule, "allow");
       }
@@ -484,7 +486,7 @@ const decideFor = async (
     rules: options.rules,
     context: options.permissionContext,
     withinWorkspace,
-    ...(isReadOnlyCommandFor(call, options.toolContext.platform)
+    ...(isReadOnlyCommandFor(call, options.toolContext.platform, options.toolContext)
       ? { readOnlyCommand: true }
       : {}),
   };
@@ -492,7 +494,9 @@ const decideFor = async (
   return decidePermission(request);
 };
 
-/** The subject of a tool call. */
+/** Escape glob metacharacters in a rule subject. */
+const escapeRuleSubject = (subject: string): string =>
+  subject.replace(/[*?[\]]/g, (char) => `\\${char}`);
 const computeSubject = (
   definition: {
     readonly subject?: (args: never) => string | undefined;
@@ -527,13 +531,44 @@ const isWithinWorkspace = async (
 const isReadOnlyCommandFor = (
   call: ToolCall,
   platform: NodeJS.Platform,
+  context: ToolContext,
 ): boolean => {
   if (call.name !== "run_command") {
     return false;
   }
   const args = call.args as { command?: unknown } | undefined;
-  return (
-    typeof args?.command === "string" &&
-    isReadOnlyCommand(args.command, platform)
-  );
+  if (typeof args?.command !== "string") {
+    return false;
+  }
+  if (!isReadOnlyCommand(args.command, platform)) {
+    return false;
+  }
+
+  // Resolve every path-like argument: a symlink to a credential file
+  // (notes.txt -> .env) or a path outside the workspace must prompt.
+  const words = args.command.split(/\s+/);
+  for (const word of words) {
+    if (word === "") continue;
+    if (word.startsWith("-")) continue;
+    // Strip quotes
+    const cleaned = word.replace(/^['"]|['"]$/g, "");
+    if (cleaned === "") continue;
+    try {
+      const resolved = realpathSync(cleaned.startsWith("/") || /^[A-Za-z]:/.test(cleaned)
+        ? cleaned
+        : `${context.cwd}/${cleaned}`);
+      if (isSensitivePath(resolved)) {
+        return false;
+      }
+      // Outside workspace check
+      const roots = [context.workspaceRoot, ...context.additionalDirectories];
+      const inside = roots.some((root) => isInside(resolved, root, context.caseInsensitivePaths));
+      if (!inside) {
+        return false;
+      }
+    } catch {
+      // File doesn't exist - can't resolve, skip
+    }
+  }
+  return true;
 };

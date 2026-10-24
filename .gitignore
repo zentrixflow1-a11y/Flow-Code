@@ -27,3 +27,6 @@ npm-debug.log*
 
 # Not part of this project
 nagpur-cafes.csv
+
+.opencode/
+

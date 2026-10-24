@@ -169,8 +169,9 @@ export const UNSAFE_GIT_ARGUMENTS: readonly string[] = [
 export const UNSAFE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   find: ["-fprint", "-fprintf", "-fls", "-ok", "-exec", "-delete", "-x", "-X"],
   fd: ["-x", "-X", "--exec", "--exec-batch", "--delete"],
-  rg: ["--pre"],
+  rg: ["--pre", "-z", "--search-zip", "--hostname-bin"],
   tree: ["-o"],
+  file: ["-C"],
 };
 
 /**
@@ -254,6 +255,12 @@ export const isReadOnlyCommand = (
   }
 
   if (UNSAFE_FRAGMENTS.some((fragment) => command.includes(fragment))) {
+    return false;
+  }
+
+  // Variable expansion: $VAR, ${VAR}, $env:VAR, %VAR% (cmd.exe). A command
+  // that expands a variable can read a secret without naming it.
+  if (command.includes("$") || command.includes("%")) {
     return false;
   }
 
@@ -346,18 +353,50 @@ const isReadOnlySegment = (
  * @param program - The search program.
  * @param arguments_ - Its arguments.
  */
+const isRecursiveFlag = (argument: string, all: readonly string[]): boolean => {
+  // An exact match, or a value form.
+  if (RECURSIVE_FLAGS.includes(argument)) {
+    return true;
+  }
+
+  // `--directories=recurse` and `--directories recurse`.
+  if (argument === "--directories" && all.includes("recurse")) {
+    return true;
+  }
+  if (argument.startsWith("--directories=") && argument.endsWith("recurse")) {
+    return true;
+  }
+
+  // `-d recurse` and `-drecurse`.
+  if (argument === "-d" && all.includes("recurse")) {
+    return true;
+  }
+  if (argument.startsWith("-d") && argument.includes("recurse")) {
+    return true;
+  }
+
+  // A short-flag cluster such as `-rn`, `-ri`, `-nR`.
+  if (/^-[a-zA-Z]+$/.test(argument) && /[rR]/.test(argument)) {
+    return true;
+  }
+
+  return false;
+};
+
 const isReadOnlySearch = (
   program: string,
   arguments_: readonly string[],
 ): boolean => {
   if (program === "grep" || program === "egrep" || program === "fgrep") {
-    // Without a recursive flag, grep reads the files it is given and says
-    // nothing about a directory.
-    return !arguments_.some((argument) => RECURSIVE_FLAGS.includes(argument));
+    return !arguments_.some((argument) => isRecursiveFlag(argument, arguments_));
+  }
+
+  if (program === "diff") {
+    // `diff -r` recurses through directories.
+    return !arguments_.some((argument) => /^-[a-zA-Z]*r[a-zA-Z]*$/.test(argument) || argument === "--recursive");
   }
 
   if (program === "rg") {
-    // ripgrep recurses by default, so it only reads what it was given.
     if (
       arguments_.some(
         (argument) =>
@@ -370,7 +409,6 @@ const isReadOnlySearch = (
     const words = arguments_.filter((argument) => !argument.startsWith("-"));
     const [, ...paths] = words;
     if (paths.length === 0) {
-      // It searches the working directory.
       return false;
     }
     return paths.every((path) => looksLikeFile(path));

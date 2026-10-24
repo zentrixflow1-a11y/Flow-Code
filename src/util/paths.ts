@@ -224,6 +224,9 @@ export const SENSITIVE_DIRECTORIES: readonly string[] = [
 /** File names that hold credentials. */
 export const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
   /^\.env(\..*)?$/i,
+  /^\.env~$/i,
+  /^\.env\.bak$/i,
+  /^\.env\.swp$/i,
   /^\.envrc$/i,
   /^\.npmrc$/i,
   /^\.yarnrc(\.yml)?$/i,
@@ -243,9 +246,13 @@ export const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
   /^id_(rsa|ecdsa|dsa|ed25519)$/i,
   /^(secrets?|credentials?|client[-_]?secrets?|service[-_]?accounts?|auth|application[-_]default[-_]credentials)\.(json|ya?ml|toml|ini|env|xml)$/i,
   /\.tfvars$/i,
+  /\.tfstate$/i,
+  /\.kdbx$/i,
   /\.secret$/i,
   /^shadow$/i,
   /^environ$/i,
+  /^hosts\.yml$/i,
+  /^rclone\.conf$/i,
 ];
 
 /**
@@ -362,10 +369,25 @@ export const isSensitivePath = (path: string): boolean => {
     .split("/")
     .filter((segment) => segment !== "" && segment !== "." && segment !== "..");
 
-  for (const segment of segments) {
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i] as string;
     const lowered = segment.toLowerCase();
     if (SENSITIVE_DIRECTORIES.some((directory) => lowered === directory.toLowerCase())) {
       return true;
+    }
+    // .config/<tool> holds credentials for several tools.
+    if (lowered === ".config" && i + 1 < segments.length) {
+      const sub = (segments[i + 1] as string).toLowerCase();
+      if (sub === "gh" || sub === "rclone" || sub === "gcloud" || sub === "doctl" || sub === "hub") {
+        return true;
+      }
+    }
+    // .docker/config.json holds registry credentials.
+    if (lowered === ".docker" && i + 1 < segments.length) {
+      const sub = (segments[i + 1] as string).toLowerCase();
+      if (sub === "config.json") {
+        return true;
+      }
     }
   }
 

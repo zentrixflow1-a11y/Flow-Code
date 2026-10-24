@@ -11,6 +11,7 @@
  * `~/.flowcode/trusted.json` as a list of resolved paths, so the question is
  * asked once rather than once per session.
  */
+import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { flowError, type FlowError } from "../errors.js";
@@ -21,7 +22,49 @@ import { err, ok, type Result } from "../util/result.js";
 export const TRUST_STORE_FILE = "trusted.json";
 
 /** The version of the trust store this build writes. */
-export const TRUST_STORE_VERSION = 1;
+export const TRUST_STORE_VERSION = 2;
+
+/** The files whose contents make a directory what it is. */
+const FINGERPRINTED_FILES = [
+  ".flowcode/hooks.json",
+  ".flowcode/mcp.json",
+  ".flowcode/config.json",
+  ".flowcode/agents",
+  "FLOWCODE.md",
+  "AGENTS.md",
+];
+
+/**
+ * Hash the project's executable configuration.
+ *
+ * A directory is trusted for what it contained when the user said yes. If
+ * a later pull changes a hook or an MCP server, the hash changes and the
+ * user is asked again.
+ *
+ * @param cwd - The directory to fingerprint.
+ */
+export const fingerprintDirectory = async (cwd: string): Promise<string> => {
+  const hash = createHash("sha256");
+  for (const relative of FINGERPRINTED_FILES) {
+    const path = join(cwd, ...relative.split("/"));
+    const info = await stat(path).catch(() => undefined);
+    if (info === undefined) {
+      hash.update(`${relative}:missing\n`);
+      continue;
+    }
+    if (info.isDirectory()) {
+      hash.update(`${relative}:dir\n`);
+      continue;
+    }
+    try {
+      const text = await readFile(path, "utf8");
+      hash.update(`${relative}:${text}\n`);
+    } catch {
+      hash.update(`${relative}:unreadable\n`);
+    }
+  }
+  return hash.digest("hex");
+};
 
 /**
  * Where the trusted directories are kept.
@@ -62,6 +105,11 @@ export interface TrustStore {
   readonly version: number;
   /** The resolved paths of the trusted directories. */
   readonly directories: readonly string[];
+  /**
+   * The fingerprint of each trusted directory's executable configuration,
+   * keyed by its resolved path.
+   */
+  readonly fingerprints?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -93,7 +141,11 @@ export const readTrustStore = async (home: string): Promise<TrustStore> => {
           (entry): entry is string => typeof entry === "string" && entry !== "",
         )
       : [];
-    return { version: TRUST_STORE_VERSION, directories };
+    const fingerprints =
+      typeof record["fingerprints"] === "object" && record["fingerprints"] !== null
+        ? (record["fingerprints"] as Record<string, string>)
+        : {};
+    return { version: TRUST_STORE_VERSION, directories, fingerprints };
   } catch {
     return empty;
   }
@@ -113,6 +165,7 @@ export const writeTrustStore = async (
   const document = {
     version: TRUST_STORE_VERSION,
     directories: [...store.directories],
+    fingerprints: store.fingerprints ?? {},
   };
 
   try {
@@ -168,7 +221,18 @@ export const isTrustedDirectory = async (options: {
 }): Promise<boolean> => {
   const store = await readTrustStore(options.home);
   const resolved = await resolveDirectory(options.directory);
-  return store.directories.some((entry) => samePath(entry, resolved));
+  const entry = store.directories.find((d) => samePath(d, resolved));
+  if (entry === undefined) {
+    return false;
+  }
+  // A directory is trusted for what it contained. If its executable
+  // configuration changed, trust is revoked until the user says yes again.
+  const fingerprint = await fingerprintDirectory(options.directory);
+  const stored = (store.fingerprints ?? {})[entry];
+  if (stored !== undefined && stored !== fingerprint) {
+    return false;
+  }
+  return true;
 };
 
 /**
@@ -187,9 +251,12 @@ export const trustDirectory = async (options: {
     return ok(undefined);
   }
 
+  const fingerprint = await fingerprintDirectory(options.directory);
+
   return writeTrustStore(options.home, {
     version: TRUST_STORE_VERSION,
     directories: [...store.directories, resolved],
+    fingerprints: { ...(store.fingerprints ?? {}), [resolved]: fingerprint },
   });
 };
 

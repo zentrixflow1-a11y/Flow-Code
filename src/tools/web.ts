@@ -5,6 +5,7 @@
  * any other, and it is off unless the user has allowed it.
  */
 import { z } from "zod";
+import { isIP } from "node:net";
 import { flowError } from "../errors.js";
 import { capOutput } from "../util/text.js";
 import { applyGuard } from "./guard.js";
@@ -25,30 +26,41 @@ const BLOCKED_HOSTS: readonly string[] = [
 
 /** Whether a hostname resolves to a private or loopback address. */
 const isPrivateHost = (hostname: string): boolean => {
-  const lowered = hostname.toLowerCase();
-  // localhost is the machine itself: fetching it is not an SSRF, and local
-  // development depends on it.
-  if (lowered === "localhost" || lowered === "::1" || lowered.endsWith(".localhost")) {
-    return false;
-  }
-  if (lowered === "127.0.0.1") {
-    return false;
-  }
-  if (/^127\./.test(lowered) || /^10\./.test(lowered) || /^192\.168\./.test(lowered)) {
-    return true;
-  }
-  const match172 = /^172\.(\d+)\./.exec(lowered);
-  if (match172 !== null) {
-    const octet = Number(match172[1]);
-    if (octet >= 16 && octet <= 31) {
-      return true;
+  const cleaned = hostname.replace(/^\[|\]$/g, "");
+  const mapped = /^::ffff:(.+)$/i.exec(cleaned);
+  const address = (mapped !== null ? mapped[1] : cleaned) ?? cleaned;
+  const version = isIP(address);
+
+  if (version === 0) {
+    const lowered = cleaned.toLowerCase();
+    if (lowered === "localhost" || lowered.endsWith(".localhost")) {
+      return false;
     }
+    return false;
   }
-  if (/^169\.254\./.test(lowered)) {
-    return true;
+
+  if (version === 4) {
+    if (address === "127.0.0.1") return false;
+    if (address === "0.0.0.0") return true;
+    if (/^127\./.test(address)) return true;
+    if (/^10\./.test(address)) return true;
+    if (/^192\.168\./.test(address)) return true;
+    const m172 = /^172\.(\d+)\./.exec(address);
+    if (m172 !== null) {
+      const o = Number(m172[1]);
+      if (o >= 16 && o <= 31) return true;
+    }
+    if (/^169\.254\./.test(address)) return true;
+    if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\./.test(address)) return true;
+    return false;
   }
-  if (/^fc00:|^fd/.test(lowered)) {
-    return true;
+
+  const lowered = address.toLowerCase();
+  if (lowered === "::1") return false;
+  if (lowered.startsWith("fe80:")) return true;
+  if (/^fc[0-9a-f]{2}:|^fd[0-9a-f]{2}:/.test(lowered)) return true;
+  if (lowered.startsWith("::ffff:")) {
+    return isPrivateHost(lowered.slice(7));
   }
   return false;
 };

@@ -480,9 +480,11 @@ export class FlowSession {
         await this.rememberRule(rule, bucket);
       },
       ...(instructions === "" ? {} : { extraInstructions: instructions }),
-      ...(this.#options.signal === undefined ? {} : { signal: this.#options.signal }),
+      signal:
+        this.#options.signal === undefined
+          ? this.#abortController.signal
+          : AbortSignal.any([this.#abortController.signal, this.#options.signal]),
       ...(this.#options.maxTurns === undefined ? {} : { maxTurns: this.#options.maxTurns }),
-      signal: this.#abortController.signal,
     };
 
     return runAgent(agentOptions, prompt);
